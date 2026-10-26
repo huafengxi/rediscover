@@ -345,4 +345,3 @@
 [卡尔文 诺贝尔演讲](https://www.nobelprize.org/uploads/2017/03/calvin-lecture.pdf)：光合作用中碳去向的研究与同位素示踪。
 
 [BMJ When somebody loses weight where does the fat go](https://www.bmj.com/content/349/bmj.g7257)：人体物质经二氧化碳和水等产物离开的质量核算，需要计入参与反应的氧气。
-
