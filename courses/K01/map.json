@@ -1,0 +1,22 @@
+{"height":180,"draw":[
+  ["line",20,71,380,71,"guide"],
+  ["line",20,97,380,97,"guide"],
+  ["line",115,145,138,141,"surface"],
+  ["line",138,141,174,151,"surface"],
+  ["line",174,151,181,124,"surface"],
+  ["line",181,124,232,121,"surface"],
+  ["line",232,121,295,144,"surface"],
+  ["line",232,121,232,50,"measure"],
+  ["line",232,50,288,40,"surface"],
+  ["line",288,40,328,48,"surface"],
+  ["dot",115,145],
+  ["label",115,171,"A 仓库","middle"],
+  ["dot",232,121],
+  ["label",149,114,"B 南桥头","middle"],
+  ["dot",295,144],
+  ["label",299,170,"D 码头","middle"],
+  ["dot",328,48],
+  ["label",323,30,"C 观测站","middle"],
+  ["label",256,87,"桥","start"],
+  ["label",42,90,"河","start"]
+]}
