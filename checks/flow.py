@@ -39,6 +39,18 @@ def svg(b,f):
     return data
 
 
+def a03_clock(b, step):
+    f=step['figure']; data=svg(b,f).decode()
+    assert '练习点' in data and '练习点' in f['alt']
+    # This exercise varies only the time at an unrelated site; it must not give
+    # the actual B noon observation away in the graphic or its text equivalents.
+    assert all(x not in data+f['caption']+f['alt'] for x in ('北站','南站','12:00','7.2°','800 km'))
+
+
+def private_question(q):
+    assert not {'answer','example','criteria','cues','pass','partial','hint','tol','inputs','units'} & q.keys()
+
+
 def a03(args):
     cid='A03'
     for prediction in ('北站会有偏差','两站没有差别',None):
@@ -47,6 +59,7 @@ def a03(args):
         assert [s['id'] for s in start['steps']]==['setup']
         r=b.read(cid); assert [s['id'] for s in r['steps']]==['setup','sticks'] and r['gate']['id']=='observations'
         assert all(x not in json.dumps(r,ensure_ascii=False) for x in ('7.2°','800 km','40,000','10.9°'))
+        a03_clock(b,r['steps'][1])
         b.raw('read-media/A03/observations.svg',expect=404)
         b.read_on(cid,'closure',version,expect=409)
         b.read_on(cid,'observations',version-1,expect=409)
@@ -63,6 +76,8 @@ def a03(args):
         action('arc','reveal',expect=409); action('arc','hint',expect=409)
         v=action('setup','continue'); assert [s['id'] for s in v['steps']]==['setup','sticks']
         assert '7.2°' not in json.dumps(v,ensure_ascii=False)
+        a03_clock(b,v['steps'][1])
+        b.raw('media/A03/observations.svg',expect=404)
         k=uuid.uuid4().hex
         for _ in range(2):
             v=action('sticks',answer=prediction or '',action='submit' if prediction else 'skip',key=k)
@@ -72,7 +87,8 @@ def a03(args):
         assert b.read(cid)==r  # quiz data is not added to the article
         svg(b,v['steps'][2]['figure']); b.raw('media/A03/geometry.svg',expect=404)
         action('observations','continue'); v=action('geometry','continue'); assert len(v['steps'])==5
-        q=v['steps'][-1]['question']; assert q['canHint'] and q['hints']==[] and 'solution' not in v['steps'][-1]
+        q=v['steps'][-1]['question']; private_question(q)
+        assert q['canHint'] and q['hints']==[] and 'solution' not in v['steps'][-1]
         k=uuid.uuid4().hex
         hint1=action('arc','hint',key=k); assert hint1==action('arc','hint',key=k)
         hint2=action('arc','hint'); step=hint2['steps'][-1]
@@ -135,6 +151,9 @@ def routes(args,selected=()):
             assert s['html'] and s['html'] not in seen,(i,s['id']); seen.add(s['html']); steps+=1
             assert {k:s[k] for k in ('id','html','title')}=={k:read[k] for k in ('id','html','title')}
             assert not any(k in read for k in ('attempts','prediction')) and 'solution' not in s
+            if q:
+                private_question(q)
+                private_question(read['question'])
             for link in re.findall(r'href="/rediscover/([A-N]\d\d)/[^\"]*"',s['html']): assert link in got
             if s.get('figure'):
                 f,rf=s['figure'],read['figure']; assert f['caption']==rf['caption'] and f['alt']==rf['alt']
