@@ -37,7 +37,15 @@ class CDP:
     def wait(self,expression,seconds=23):
         start=time.monotonic()
         while time.monotonic()-start<seconds:
-            if self.js(expression): return
+            try:
+                if self.js(expression): return
+            except RuntimeError as e:
+                # The previous document can disappear between requesting and evaluating a navigation wait.
+                error=e.args[0] if e.args else None
+                if not isinstance(error,dict) or error.get('code')!=-32000 or error.get('message') not in (
+                    'Inspected target navigated or closed','Cannot find context with specified id',
+                ):
+                    raise
             time.sleep(.1)
         raise AssertionError(f'Browser timed out on {expression}')
     def click(self,caption):
