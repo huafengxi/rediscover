@@ -226,6 +226,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header('Content-Type',media)
         self.send_header('Content-Length',str(len(data)))
+        # The gateway pools upstream HTTP/1.1 connections. Announce the socket
+        # close used for POSTs before an action or replay can reuse that socket.
+        if self.close_connection:
+            self.send_header('Connection','close')
         self.send_header('Cache-Control','private, no-store')
         self.send_header('Vary','Cookie')
         self.send_header('X-Content-Type-Options','nosniff')
