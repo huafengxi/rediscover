@@ -11,8 +11,8 @@
 ## dev 发布
 
 1. 构建通过后把 commit 及唯一 `deploy-*` tag 推到项目 `origin`。在 `~/m/run/local/data/rediscover/releases/<tag>/` 装配该 tag（例如新建目录后 `git archive <tag> | tar -x -C <release>`），部署快照不由日常工作树运行。
-2. 把状态单独放在 `~/m/run/local/data/rediscover/state/`（含 SQLite、WAL）；依赖与模型也在发布目录之外。`requirements-dev-service.txt` 用单独的 `--system-site-packages` venv 装配；PyTorch、Transformers 使用 dev 既有 Python 运行时。可选 `REDISCOVER_SPEECH_MODEL` 指向已下载的 Vosk Small CN 目录，可选 `REDISCOVER_LOCAL_AI_MODEL` 指向已校验的本地 Qwen 模型目录。加载只读、本地、无自动下载、禁用远程模型代码。输出只作为当前步的有限判据标签；给读者的反馈来自作者，读者可随时直接展开作者解释。只有显式授权使用 OpenAI 兼容适配器的部署才配置 `REDISCOVER_AI_URL`、`REDISCOVER_AI_MODEL` 及从既有授权配置注入的 `REDISCOVER_AI_TOKEN`；不得把密钥提交进仓库。dev 使用本地模型，不用代理账户池。
-3. 按 dev 配置仓的 `env/services/rediscover.json`、`env/running.json` 和对应 Web 路由部署；通过 `~/miniconda3/bin/python3 ~/m/svc/svc.py start|stop|status rediscover` 操作。新发布需更新不可变 tag 引用、重启 Rediscover 并核验入口版本以及课程路由。回退保留 DB，先把声明的版本和目录切回此前可用 tag，再重启 Rediscover；首发前无 Rediscover 发布，首发回退是撤 Rediscover 路由并停 Rediscover，其他站点无需停。
+2. 把状态单独放在 `~/m/run/local/data/rediscover/state/`（含 SQLite、WAL 和会话签名密钥；备份时一并保留）；依赖与模型也在发布目录之外。`requirements-dev-service.txt` 用单独的 `--system-site-packages` venv 装配；PyTorch、Transformers 使用 dev 既有 Python 运行时。可选 `REDISCOVER_SPEECH_MODEL` 指向已下载的 Vosk Small CN 目录，可选 `REDISCOVER_LOCAL_AI_MODEL` 指向已校验的本地 Qwen 模型目录。加载只读、本地、无自动下载、禁用远程模型代码。输出只作为当前步的有限判据标签；给读者的反馈来自作者，读者可随时直接展开作者解释。只有显式授权使用 OpenAI 兼容适配器的部署才配置 `REDISCOVER_AI_URL`、`REDISCOVER_AI_MODEL` 及从既有授权配置注入的 `REDISCOVER_AI_TOKEN`；不得把密钥提交进仓库。dev 使用本地模型，不用代理账户池。
+3. 按 dev 配置仓的 `env/services/rediscover.json`、`env/running.json` 及 `env/services/web-gateway.json` 部署；Rediscover 使用 gateway 的独立前缀（旧 W 代理会记录响应头，不应用作 Rediscover 的会话链路）。通过 `~/miniconda3/bin/python3 ~/m/svc/svc.py start|stop|status rediscover` 操作。常规更新只更新不可变 tag 引用、重启 Rediscover 并核验入口版本和课程路由。若回退，保留 DB 与密钥，选已经采用签名会话、且经过核验的历史版本；首发时没有这样的前版，则仅撤 Rediscover 的 gateway 路由并停 Rediscover，不改其他应用路由。修改 gateway 配置才需要在无活跃连接的窗口重启 gateway。
 
 语音在现有 HTTP 上使用系统录音/音频文件选择；浏览器支持捕获时会提供设备录音器，否则先用系统录音再选文件。这条路径不依赖网页麦克风权限，不调用浏览器厂商的远程转写。音频通过现有 Web 进程发到同机 Rediscover（HTTP 不是加密链路，只应在现有受控 dev 网络使用），在内存解码，不作文件持久化；转写进同一个输入框，可编辑，不自动提交。限 20 秒、2 MB。列式时可手改未准确识别的数字与括号。
 
@@ -21,4 +21,4 @@
 - `python3 -B checks/build.py`：地图覆盖、独立手稿、HTML/图、链接、结构与算式题配置。
 - `python3 -B checks/flow.py <入口>/rediscover/ --all [--auth-file <既有授权文件>]`：独立 HTTP 检查（包括提前读取和重复动作），逐步加载每一课和配图。
 - `python3 -B checks/failure.py http://127.0.0.1:18871/rediscover/ "$scratch/state.sqlite" "$scratch"`：只在新建的独立测试目录和非线上端口故障注入。
-- `python3 -B checks/browser.py <入口>/rediscover/ --chrome <已安装Chromium> --profile <新建于/tmp的短路径> --output <证据目录>`：需 `websocket-client`。线上加 `--auth-file`；AI 可用时加 `--ai`，实际语音验证加 `--audio <测试录音.wav>`。浏览器通过真正 HTTP 运行脚本，桌面/手机视口有独立过程；不把截图或录音作为发布内容。配置鉴权文件参数只传路径，不打印文本。
+- `python3 -B checks/browser.py <入口>/rediscover/ --chrome <已安装Chromium> --profile <新建于/tmp的短路径> --output <证据目录>`：需 `websocket-client`。线上加 `--auth-file`；AI 可用时加 `--ai`，实际语音验证加 `--audio <测试录音.wav>`。若测试机无中文系统字体，可加 `--fonts <本地 CJK 字体目录>`，只作用于该临时 Chromium 配置。浏览器通过真正 HTTP 运行脚本，桌面/手机视口有独立过程；不把截图或录音作为发布内容。配置鉴权文件参数只传路径，不打印文本。

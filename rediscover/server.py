@@ -1,5 +1,5 @@
 """Rediscover HTTP service. Bind to loopback behind the authenticated dev ingress."""
-import argparse, json, os, re, secrets, sqlite3, time, urllib.request
+import argparse, hmac, json, os, re, secrets, sqlite3, urllib.request
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 from . import content, mathcheck, local_models
 
 PREFIX = '/rediscover/'
-COOKIE = 'rd_session'
+COOKIE = 'rd_session_v2'
 ASSETS = Path(__file__).with_name('web')
 ID = r'[A-N][0-9]{2}'
 TOKEN = r'[a-zA-Z0-9_-]{20,64}'
@@ -18,6 +18,12 @@ class Problem(Exception):
 class App:
     def __init__(self, db, release):
         self.db,self.release = db,release
+        secret_file = Path(db).with_suffix('.session-key')
+        try:
+            with secret_file.open('xb') as f: f.write(secrets.token_bytes(32))
+        except FileExistsError: pass
+        self.secret = secret_file.read_bytes()
+        if len(self.secret)!=32: raise ValueError('Invalid session key file')
         self.groups,self.courses = content.load()
         self.groups = {k:{'title':v[0],'count':v[1]} for k,v in self.groups.items()}
         self.ai_url = os.getenv('REDISCOVER_AI_URL','')
@@ -45,6 +51,15 @@ class App:
 
     def connect(self):
         return sqlite3.connect(self.db, timeout=5)
+
+    def cookie(self, sid):
+        return sid+'.'+hmac.digest(self.secret,sid.encode(),'sha256').hex()
+
+    def session_id(self, value):
+        sid,sep,sig = value.partition('.')
+        if sep and re.fullmatch(TOKEN,sid) and re.fullmatch(r'[0-9a-f]{64}',sig) and hmac.compare_digest(self.cookie(sid),value):
+            return sid
+        return None
 
     def progress(self, c, sid, course):
         row = c.execute('SELECT data FROM progress WHERE sid=? AND id=? AND version=?',(sid,course['id'],course['version'])).fetchone()
@@ -158,7 +173,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
         if sid:
             protocol = self.headers.get('X-Forwarded-Proto','').split(',')[0].strip()
-            self.send_header('Set-Cookie',f'{COOKIE}={sid}; Path={PREFIX}; HttpOnly; SameSite=Strict; Max-Age=31536000'+ ('; Secure' if protocol=='https' else ''))
+            self.send_header('Set-Cookie',f'{COOKIE}={self.server.app.cookie(sid)}; Path={PREFIX}; HttpOnly; SameSite=Strict; Max-Age=31536000'+ ('; Secure' if protocol=='https' else ''))
         if location: self.send_header('Location',location)
         self.end_headers()
         if self.command != 'HEAD': self.wfile.write(data)
@@ -173,7 +188,7 @@ class Handler(BaseHTTPRequestHandler):
         try: jar.load(self.headers.get('Cookie',''))
         except cookies.CookieError: pass
         value = jar[COOKIE].value if COOKIE in jar else ''
-        sid = value if re.fullmatch(TOKEN,value) else None
+        sid = app.session_id(value)
         if self.command == 'POST':
             self.close_connection = True
             if not sid: raise Problem(409,'会话还未建立，请刷新后重试。')

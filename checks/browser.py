@@ -2,21 +2,34 @@
 import argparse, base64, json, os, re, subprocess, time, urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
+from xml.sax.saxutils import escape
 from websocket import create_connection
 
 class CDP:
     def __init__(self,port):
         targets=json.load(urllib.request.urlopen(f'http://127.0.0.1:{port}/json/list',timeout=4))
         self.ws=create_connection(next(t['webSocketDebuggerUrl'] for t in targets if t['type']=='page'),timeout=30,suppress_origin=True)
-        self.serial=0
+        self.serial=0; self.credentials=None; self.auth_attempted=set()
+    def call(self,method,**params):
+        self.serial+=1
+        self.ws.send(json.dumps(dict(id=self.serial,method=method,params=params)))
+        return self.serial
     def send(self,method,**params):
-        self.serial+=1; i=self.serial
-        self.ws.send(json.dumps(dict(id=i,method=method,params=params)))
+        i=self.call(method,**params)
         while True:
             result=json.loads(self.ws.recv())
             if result.get('id')==i:
                 if 'error' in result: raise RuntimeError(result['error'])
                 return result['result']
+            e=result.get('params',{}); event=result.get('method')
+            if event=='Fetch.requestPaused':
+                self.call('Fetch.continueRequest',requestId=e['requestId'])
+            if event=='Fetch.authRequired':
+                user,password,origin=self.credentials
+                rid=e['requestId']; challenge=e.get('authChallenge',{})
+                ok=(rid not in self.auth_attempted and challenge.get('source')=='Server' and challenge.get('origin')==origin and challenge.get('scheme','').lower()=='basic')
+                self.auth_attempted.add(rid)
+                self.call('Fetch.continueWithAuth',requestId=rid,authChallengeResponse={'response':'ProvideCredentials','username':user,'password':password} if ok else {'response':'CancelAuth'})
     def js(self,expression):
         r=self.send('Runtime.evaluate',expression=expression,returnByValue=True,awaitPromise=True)
         if 'exceptionDetails' in r: raise RuntimeError('Browser evaluation failed: '+expression)
@@ -46,8 +59,10 @@ def exercise(c,args):
     base=args.url.rstrip('/')+'/'
     c.send('Network.enable'); c.send('Page.enable'); c.send('DOM.enable')
     if args.auth_file:
-        credential='Basic '+base64.b64encode(args.auth_file.read_bytes().strip()).decode()
-        c.send('Network.setExtraHTTPHeaders',headers={'Authorization':credential})
+        user,password=args.auth_file.read_text().strip().split(':',1)
+        u=urlsplit(base)
+        c.credentials=(user,password,u.scheme+'://'+u.netloc)
+        c.send('Fetch.enable',patterns=[{'urlPattern':base+'*'}],handleAuthRequests=True)
     c.send('Emulation.setDeviceMetricsOverride',width=1366,height=900,deviceScaleFactor=1,mobile=False)
     def page(s):
         c.send('Page.navigate',url=base+s); c.wait('location.pathname==='+json.dumps(urlsplit(base+s).path))
@@ -94,10 +109,15 @@ def exercise(c,args):
     print('Mobile: 390×844 with touch, A18 clock correction, N12 independent signal and return window, SVG loaded and no horizontal overflow',flush=True)
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(); p.add_argument('url'); p.add_argument('--chrome',type=Path,required=True);p.add_argument('--profile',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--auth-file',type=Path);p.add_argument('--audio',type=Path);p.add_argument('--ai',action='store_true');p.add_argument('--no-sandbox',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser(); p.add_argument('url'); p.add_argument('--chrome',type=Path,required=True);p.add_argument('--profile',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--auth-file',type=Path);p.add_argument('--audio',type=Path);p.add_argument('--fonts',type=Path);p.add_argument('--ai',action='store_true');p.add_argument('--no-sandbox',action='store_true');a=p.parse_args()
     a.profile.mkdir(mode=0o700); a.output.mkdir(parents=True,exist_ok=True)
+    env={**os.environ,'TMPDIR':str(a.profile)}
+    if a.fonts:
+        fonts=a.profile/'fontconfig.xml'
+        fonts.write_text(f'<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd"><fontconfig><include>/etc/fonts/fonts.conf</include><dir>{escape(str(a.fonts.resolve()))}</dir><cachedir>{escape(str(a.profile/"fonts-cache"))}</cachedir></fontconfig>')
+        env['FONTCONFIG_FILE']=str(fonts)
     with (a.output/'chromium.log').open('wb') as log:
-        proc = subprocess.Popen([str(a.chrome),'--headless','--disable-gpu','--no-first-run','--disable-background-networking','--disable-sync','--remote-debugging-port=0',f'--user-data-dir={a.profile}',*(['--no-sandbox'] if a.no_sandbox else []),'about:blank'],env={**os.environ,'TMPDIR':str(a.profile)},stdin=subprocess.DEVNULL,stdout=log,stderr=log)
+        proc = subprocess.Popen([str(a.chrome),'--headless','--disable-gpu','--no-first-run','--disable-background-networking','--disable-sync','--remote-debugging-port=0',f'--user-data-dir={a.profile}',*(['--no-sandbox'] if a.no_sandbox else []),'about:blank'],env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=log)
         try:
             ready=a.profile/'DevToolsActivePort'; deadline=time.monotonic()+12
             while not ready.exists():
