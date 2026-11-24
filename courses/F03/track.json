@@ -1,0 +1,14 @@
+{"height": 195, "draw": [
+  ["line",31,160,373,160,"guide"],
+  ["line",52,48,160,160,"surface"],
+  ["line",160,160,228,160,"surface"],
+  ["line",228,160,330,75,"surface"],
+  ["line",52,35,73,35,"ink"],
+  ["line",73,35,73,49,"ink"],
+  ["line",73,49,52,49,"ink"],
+  ["line",52,49,52,35,"ink"],
+  ["label",82,29,"静止起点","middle"],
+  ["label",76,83,"8 m","middle"],
+  ["label",328,64,"6 m","middle"],
+  ["label",186,184,"谷底 0 m","middle"]
+]}

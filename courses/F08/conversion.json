@@ -1,0 +1,17 @@
+{"height": 192, "draw": [
+  ["label",53,46,"轴","middle"],
+  ["label",195,46,"发电机","middle"],
+  ["label",348,46,"负载","middle"],
+  ["line",52,83,150,83,"measure"],
+  ["line",150,83,142.0,79.0,"measure"],
+  ["line",150,83,142.0,87.0,"measure"],
+  ["line",235,83,348,83,"surface"],
+  ["line",348,83,340.0,79.0,"surface"],
+  ["line",348,83,340.0,87.0,"surface"],
+  ["label",94,108,"50 W 入","middle"],
+  ["label",303,108,"6 V、5 A","middle"],
+  ["line",193,91,193,145,"guide"],
+  ["line",193,145,197.0,137.0,"guide"],
+  ["line",193,145,189.0,137.0,"guide"],
+  ["label",194,168,"损耗向外","middle"]
+]}

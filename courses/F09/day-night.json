@@ -1,0 +1,17 @@
+{"height": 169, "draw": [
+  ["line",30,127,370,127,"ink"],
+  ["line",370,127,362.0,123.0,"ink"],
+  ["line",370,127,362.0,131.0,"ink"],
+  ["line",42,74,355,74,"guide"],
+  ["line",52,74,52,38,"surface"],
+  ["line",52,38,184,38,"surface"],
+  ["line",184,38,184,74,"surface"],
+  ["line",239,74,239,105,"measure"],
+  ["line",239,105,327,105,"measure"],
+  ["line",327,105,327,74,"measure"],
+  ["label",118,28,"余 4 kW","middle"],
+  ["label",280,97,"缺 4 kW","middle"],
+  ["label",118,152,"正午 3 h","middle"],
+  ["label",282,152,"夜间 2 h","middle"],
+  ["label",365,72,"零","middle"]
+]}

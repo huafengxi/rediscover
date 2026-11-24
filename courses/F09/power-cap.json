@@ -1,0 +1,12 @@
+{"height": 192, "draw": [
+  ["line",75,149,331,149,"ink"],
+  ["line",77,48,77,150,"ink"],
+  ["line",84,65,316,65,"guide"],
+  ["line",84,86,316,86,"surface"],
+  ["line",316,86,316,148,"surface"],
+  ["line",316,148,84,148,"surface"],
+  ["line",84,148,84,86,"surface"],
+  ["label",200,54,"需求：4 kW","middle"],
+  ["label",200,110,"并网输出：最多 3 kW","middle"],
+  ["label",199,174,"晚峰 2 h","middle"]
+]}
