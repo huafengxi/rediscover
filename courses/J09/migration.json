@@ -1,0 +1,16 @@
+{"height":108,"draw":[
+  ["label",12,36,"原有 10 张","start"],
+  ["circle",142,30,6,"measure"],
+  ["circle",164,30,6,"measure"],
+  ["circle",186,30,6,"measure"],
+  ["circle",208,30,6,"measure"],
+  ["circle",230,30,6,"measure"],
+  ["circle",252,30,6,"guide"],
+  ["circle",274,30,6,"guide"],
+  ["circle",296,30,6,"guide"],
+  ["circle",318,30,6,"guide"],
+  ["circle",340,30,6,"guide"],
+  ["label",12,79,"新来 2 张","start"],
+  ["circle",142,73,6,"measure"],
+  ["circle",164,73,6,"measure"]
+]}

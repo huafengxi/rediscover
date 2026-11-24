@@ -1,0 +1,10 @@
+{"height":156,"draw":[
+  ["label",20,29,"双杂合亲本两份标记","start"],
+  ["line",61,58,335,58,"surface"],
+  ["line",61,96,335,96,"guide"],
+  ["label",112,52,"A","middle"],
+  ["label",285,52,"B","middle"],
+  ["label",112,90,"a","middle"],
+  ["label",285,90,"b","middle"],
+  ["label",200,139,"测试方恒给 ab，便于读出另一份","middle"]
+]}

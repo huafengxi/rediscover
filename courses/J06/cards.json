@@ -1,0 +1,21 @@
+{"height":145,"draw":[
+  ["line",19,31,126,31,"surface"],
+  ["line",126,31,126,101,"surface"],
+  ["line",126,101,19,101,"surface"],
+  ["line",19,101,19,31,"surface"],
+  ["line",146,31,253,31,"surface"],
+  ["line",253,31,253,101,"surface"],
+  ["line",253,101,146,101,"surface"],
+  ["line",146,101,146,31,"surface"],
+  ["line",273,31,380,31,"guide"],
+  ["line",380,31,380,101,"guide"],
+  ["line",380,101,273,101,"guide"],
+  ["line",273,101,273,31,"guide"],
+  ["label",72,58,"G C U","middle"],
+  ["label",199,58,"G C C","middle"],
+  ["label",327,58,"U A A","middle"],
+  ["label",72,88,"Ala","middle"],
+  ["label",199,88,"Ala","middle"],
+  ["label",327,88,"停","middle"],
+  ["label",200,131,"每框一张独立字卡","middle"]
+]}
