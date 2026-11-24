@@ -158,6 +158,13 @@ def routes(args,selected=()):
             if s.get('figure'):
                 f,rf=s['figure'],read['figure']; assert f['caption']==rf['caption'] and f['alt']==rf['alt']
                 assert svg(b,f)==svg(b,rf); images+=1
+            # Finishing the article must not open figures or answers in quiz mode.
+            if len(v['steps']) < len(r['steps']):
+                following=r['steps'][len(v['steps'])]
+                if f:=following.get('figure'):
+                    b.raw(f['url'].replace('/read-media/','/media/'),expect=404)
+                if 'solution' in following:
+                    b.action(i,following['id'],'reveal',version=v['version'],expect=409)
             action='continue' if not q else 'skip' if q['kind']=='prediction' else 'reveal'
             new=b.action(i,s['id'],action,version=v['version'])
             assert new['completed'] or len(new['steps'])==len(v['steps'])+1

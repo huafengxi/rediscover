@@ -34,4 +34,7 @@ if __name__=='__main__':
     for cid,terms in [('B03',['不是从一个反应','数密度']),('D07',['平方和公式','趋零']),('I04',['误报','漏报']),('N12',['两份档案','月面记录为 114.0','备用校验'])]:
         text=' '.join(s['body'] for s in courses[cid]['steps'])
         assert all(t in text for t in terms),cid
-    print('14 series teaching/figure fixtures plus B03, D07, I04, N12 evidence checks')
+    d05=next(s['question'] for s in courses['D05']['steps'] if s['id']=='evidence')
+    assert all(grade(d05,expr,'cm²')[0] for expr in ('π*2^2','0.5*2*(2*π*2)','3.1416*4'))
+    assert not grade(d05,'12.5664','cm²')[0] and not grade(d05,'π*2^2','cm')[0]
+    print('14 series teaching/figure fixtures plus B03, D07, I04, N12 evidence checks and D05 π/decimal equivalence')
