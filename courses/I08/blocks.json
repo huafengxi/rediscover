@@ -1,0 +1,18 @@
+{"height":171,"draw":[
+  ["line",14,35,386,35,"surface"],
+  ["line",386,35,386,89,"surface"],
+  ["line",386,89,14,89,"surface"],
+  ["line",14,89,14,35,"surface"],
+  ["line",14,99,386,99,"surface"],
+  ["line",386,99,386,153,"surface"],
+  ["line",386,153,14,153,"surface"],
+  ["line",14,153,14,99,"surface"],
+  ["label",60,68,"一区","middle"],
+  ["label",60,132,"二区","middle"],
+  ["label",165,68,"新灯 3 盆","middle"],
+  ["label",294,68,"旧灯 3 盆","middle"],
+  ["label",165,132,"旧灯 3 盆","middle"],
+  ["label",294,132,"新灯 3 盆","middle"],
+  ["line",226,40,226,84,"guide"],
+  ["line",226,104,226,148,"guide"]
+]}
