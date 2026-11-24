@@ -18,7 +18,7 @@
 
 ## 可复跑检查
 
-- `python3 -B checks/build.py`：地图覆盖、独立手稿、HTML/图、链接、结构与算式题配置。
+- `python3 -B checks/build.py`：地图覆盖、独立手稿、HTML/图、链接、结构与算式题配置。`python3 -B checks/curriculum_samples.py` 另外检查每条主线的一项具体计算、图注和收束。
 - `python3 -B checks/flow.py <入口>/rediscover/ --all [--auth-file <既有授权文件>]`：独立 HTTP 检查（包括提前读取和重复动作），逐步加载每一课和配图。
 - `python3 -B checks/failure.py http://127.0.0.1:18871/rediscover/ "$scratch/state.sqlite" "$scratch"`：只在新建的独立测试目录和非线上端口故障注入。
 - `python3 -B checks/browser.py <入口>/rediscover/ --chrome <已安装Chromium> --profile <新建于/tmp的短路径> --output <证据目录>`：需 `websocket-client`。线上加 `--auth-file`；AI 可用时加 `--ai`，实际语音验证加 `--audio <测试录音.wav>`。若测试机无中文系统字体，可加 `--fonts <本地 CJK 字体目录>`，只作用于该临时 Chromium 配置。浏览器通过真正 HTTP 运行脚本，桌面/手机视口有独立过程；不把截图或录音作为发布内容。配置鉴权文件参数只传路径，不打印文本。

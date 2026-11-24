@@ -57,7 +57,7 @@ class CDP:
 
 def exercise(c,args):
     base=args.url.rstrip('/')+'/'
-    c.send('Network.enable'); c.send('Page.enable'); c.send('DOM.enable')
+    c.send('Network.enable'); c.send('Network.setCacheDisabled',cacheDisabled=True); c.send('Page.enable'); c.send('DOM.enable')
     if args.auth_file:
         user,password=args.auth_file.read_text().strip().split(':',1)
         u=urlsplit(base)
@@ -66,7 +66,10 @@ def exercise(c,args):
     c.send('Emulation.setDeviceMetricsOverride',width=1366,height=900,deviceScaleFactor=1,mobile=False)
     def page(s):
         c.send('Page.navigate',url=base+s); c.wait('location.pathname==='+json.dumps(urlsplit(base+s).path))
-    page(''); c.wait('document.querySelectorAll(".list a").length===140'); c.no_overflow()
+    page('')
+    # Chromium has accepted/cached the BasicAuth challenge for this origin; resume normal network I/O.
+    if args.auth_file: c.send('Fetch.disable')
+    c.wait('document.querySelectorAll(".list a").length===140'); c.no_overflow()
     c.screenshot(args.output/'desktop-catalog.png')
     page('A03/'); c.steps(1); c.images()
     c.fill('北边影子增加'); c.offline(True); c.click('提交'); c.text('连接中断'); c.steps(1)
@@ -89,13 +92,14 @@ def exercise(c,args):
     c.fill('我只说天平'); c.click('提交'); c.text('先说清楚 150.00 g'); c.steps(4)
     if args.ai:
         c.fill('同一封闭装置（容器、空气、金属）整体前后均为 150.00 g，在 ±0.02 g 测量精度内不变；金属增加 0.30 g，说明其他部分共少约 0.30 g 的内部转移是合理推论，不是直接测量。'); c.click('提交'); c.steps(5)
-        c.text('你把测量范围固定了')
+        c.text('你把测量范围固定了'); c.js('document.getElementById("sealed").scrollIntoView()'); c.screenshot(args.output/'desktop-b01-rubric.png')
     else: c.click('查看作者解释'); c.steps(5)
     c.fill('70+0.5+0.6-1.5-0.7-0.6','kg'); c.click('提交'); c.steps(6); c.click('完成本关'); c.completed(); c.no_overflow()
     print('Desktop: B01 original/skip, sealed mass, rubric feedback, transfer and completion',flush=True)
     c.send('Emulation.setDeviceMetricsOverride',width=390,height=844,deviceScaleFactor=2,mobile=True)
     c.send('Emulation.setTouchEmulationEnabled',enabled=True,maxTouchPoints=1)
     page('A18/'); c.steps(1); c.fill('偏东'); c.click('提交'); c.steps(2); c.images(); c.no_overflow()
+    c.js('document.querySelector("#evidence figure").scrollIntoView({block:"center"})'); c.screenshot(args.output/'mobile-a18-evidence.png')
     c.fill('(12-10)*360/24','°'); c.click('提交'); c.steps(3); c.text('东 30.5°'); c.click('完成本关'); c.completed()
     c.js('window.scrollTo(0,0)'); c.screenshot(args.output/'mobile-a18.png')
     page('N12/'); c.steps(1); c.click('暂时想不出'); c.steps(2); c.images(); c.no_overflow()
@@ -117,7 +121,7 @@ if __name__=='__main__':
         fonts.write_text(f'<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd"><fontconfig><include>/etc/fonts/fonts.conf</include><dir>{escape(str(a.fonts.resolve()))}</dir><cachedir>{escape(str(a.profile/"fonts-cache"))}</cachedir></fontconfig>')
         env['FONTCONFIG_FILE']=str(fonts)
     with (a.output/'chromium.log').open('wb') as log:
-        proc = subprocess.Popen([str(a.chrome),'--headless','--disable-gpu','--no-first-run','--disable-background-networking','--disable-sync','--remote-debugging-port=0',f'--user-data-dir={a.profile}',*(['--no-sandbox'] if a.no_sandbox else []),'about:blank'],env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=log)
+        proc = subprocess.Popen([str(a.chrome),'--headless','--disable-gpu','--no-first-run','--disable-background-networking','--disable-sync','--no-proxy-server','--remote-debugging-port=0',f'--user-data-dir={a.profile}',*(['--no-sandbox'] if a.no_sandbox else []),'about:blank'],env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=log)
         try:
             ready=a.profile/'DevToolsActivePort'; deadline=time.monotonic()+12
             while not ready.exists():

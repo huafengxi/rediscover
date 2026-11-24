@@ -25,7 +25,8 @@ def check():
             for link in re.findall(r'href="/rediscover/([A-N]\d\d)/"',h): assert link in courses
             if 'compare' in a: assert a['compare'] in predictions
             if f:=a.get('figure'):
-                decoded=content.svg(f); assert f[2] and decoded not in figures
+                decoded=content.svg(f); assert len(f[2])>=16 and decoded not in figures
+                if f[0]=='grid': assert len({len(row) for row in f[1]})==1, (cid,a['id'])
                 assert ElementTree.fromstring(decoded).tag.endswith('}svg')
                 figures.add(decoded); cc['figures']+=1
             if q:=a.get('question'):
