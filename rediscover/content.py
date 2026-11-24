@@ -57,11 +57,12 @@ def svg(f):
         # Author supplies axes labels and numbered study points; categorical diagrams use nodes.
         xname,yname,pts = data
         h = 245
-        x0,x1 = min(0,*[x for x,y in pts]), max(1,*[x for x,y in pts])
+        lo,hi = min(x for x,y in pts),max(x for x,y in pts)
+        x0,x1 = (lo,hi) if hi-lo>0 and lo>hi-lo else (min(0,lo),max(1,hi))
         y0,y1 = min(0,*[y for x,y in pts]), max(1,*[y for x,y in pts])
         X = lambda x: 65+420*(x-x0)/(x1-x0)
         Y = lambda y: 189-135*(y-y0)/(y1-y0)
-        elements = line(48,Y(0),510,Y(0),'#9eaeac',1)+line(X(0),24,X(0),199,'#9eaeac',1)+label(507,222,xname,'end')+label(15,25,yname,'start')
+        elements = line(48,Y(0),510,Y(0),'#9eaeac',1)+line(X(max(x0,0)),24,X(max(x0,0)),199,'#9eaeac',1)+label(507,222,xname,'end')+label(15,25,yname,'start')
         for (x,y),(a,b) in zip(pts,pts[1:]): elements += line(X(x),Y(y),X(a),Y(b))
         for i,(x,y) in enumerate(pts):
             elements += point(X(x),Y(y))+label(X(x),Y(y)+(-12 if i%2==0 else 23),f'{x}, {y}',size=14)
@@ -74,6 +75,16 @@ def svg(f):
             elements += line(x,y,u,v)+label((x+u)/2,(y+v)/2-9,name,size=15)
         for x,y,name in nodes:
             elements += point(x,y)+label(x,y+25,name,size=17)
+    elif kind == 'strips':
+        h = 13+len(data)*47
+        elements = ''
+        for i,(name,count,filled) in enumerate(data):
+            width = 343/count
+            y = 10+i*47
+            elements += label(139,y+23,name,'end')
+            for j in range(count):
+                fill = '#397274' if j<filled else '#dae8e2'
+                elements += f'<rect x="{156+j*width}" y="{y}" width="{width-1}" height="32" fill="{fill}" stroke="#446966"/>'
     elif kind == 'grid':
         h = 28+len(data)*35
         elements = ''

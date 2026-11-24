@@ -1,0 +1,108 @@
+"""Drive Chromium over CDP at real desktop/mobile viewport sizes without WebDriver downloads."""
+import argparse, base64, json, os, re, subprocess, time, urllib.request
+from pathlib import Path
+from urllib.parse import urlsplit
+from websocket import create_connection
+
+class CDP:
+    def __init__(self,port):
+        targets=json.load(urllib.request.urlopen(f'http://127.0.0.1:{port}/json/list',timeout=4))
+        self.ws=create_connection(next(t['webSocketDebuggerUrl'] for t in targets if t['type']=='page'),timeout=30,suppress_origin=True)
+        self.serial=0
+    def send(self,method,**params):
+        self.serial+=1; i=self.serial
+        self.ws.send(json.dumps(dict(id=i,method=method,params=params)))
+        while True:
+            result=json.loads(self.ws.recv())
+            if result.get('id')==i:
+                if 'error' in result: raise RuntimeError(result['error'])
+                return result['result']
+    def js(self,expression):
+        r=self.send('Runtime.evaluate',expression=expression,returnByValue=True,awaitPromise=True)
+        if 'exceptionDetails' in r: raise RuntimeError('Browser evaluation failed: '+expression)
+        return r['result'].get('value')
+    def wait(self,expression,seconds=23):
+        start=time.monotonic()
+        while time.monotonic()-start<seconds:
+            if self.js(expression): return
+            time.sleep(.1)
+        raise AssertionError(f'Browser timed out on {expression}')
+    def click(self,caption):
+        self.wait(f'[...document.querySelectorAll("button")].some(x=>x.textContent==={json.dumps(caption)}&&!x.disabled)')
+        self.js(f'[...document.querySelectorAll("button")].find(x=>x.textContent==={json.dumps(caption)}&&!x.disabled).click()')
+    def fill(self,text,unit=None):
+        self.wait('!!document.querySelector("#response")')
+        self.js(f'document.querySelector("#response").value={json.dumps(text)}')
+        if unit is not None: self.js(f'document.querySelector("#unit").value={json.dumps(unit)}')
+    def steps(self,n): self.wait(f'document.querySelectorAll("article.step").length==={n}')
+    def text(self,s): self.wait('document.body.innerText.includes('+json.dumps(s)+')')
+    def images(self): self.wait('[...document.images].length > 0 && [...document.images].every(i=>i.complete && i.naturalWidth>0 && i.alt.length>0)')
+    def screenshot(self,path): path.write_bytes(base64.b64decode(self.send('Page.captureScreenshot',format='png')['data']))
+    def no_overflow(self): assert self.js('document.documentElement.scrollWidth <= innerWidth')
+    def completed(self): self.text('本关已完成')
+    def offline(self,flag): self.send('Network.emulateNetworkConditions',offline=flag,latency=0,downloadThroughput=-1,uploadThroughput=-1)
+
+def exercise(c,args):
+    base=args.url.rstrip('/')+'/'
+    c.send('Network.enable'); c.send('Page.enable'); c.send('DOM.enable')
+    if args.auth_file:
+        credential='Basic '+base64.b64encode(args.auth_file.read_bytes().strip()).decode()
+        c.send('Network.setExtraHTTPHeaders',headers={'Authorization':credential})
+    c.send('Emulation.setDeviceMetricsOverride',width=1366,height=900,deviceScaleFactor=1,mobile=False)
+    def page(s):
+        c.send('Page.navigate',url=base+s); c.wait('location.pathname==='+json.dumps(urlsplit(base+s).path))
+    page(''); c.wait('document.querySelectorAll(".list a").length===140'); c.no_overflow()
+    c.screenshot(args.output/'desktop-catalog.png')
+    page('A03/'); c.steps(1); c.images()
+    c.fill('北边影子增加'); c.offline(True); c.click('提交'); c.text('连接中断'); c.steps(1)
+    assert c.js('document.querySelector("#response").value')=='北边影子增加'
+    c.offline(False); c.click('提交'); c.steps(2); c.text('我当时写下：北边影子增加'); c.images()
+    c.fill('800/7.2','km'); c.click('提交'); c.text('每度对应的距离'); c.steps(2)
+    if args.audio:
+        audio = str(args.audio.resolve())
+        c.wait('!!document.querySelector("#voice-file")')
+        node=c.send('DOM.querySelector',nodeId=c.send('DOM.getDocument')['root']['nodeId'],selector='#voice-file')['nodeId']
+        c.send('DOM.setFileInputFiles',files=[audio],nodeId=node)
+        c.text('请核对并修改转写'); assert re.search('[\u3400-\u9fff]{2,}',c.js('document.querySelector("#response").value')); c.steps(2)
+        c.screenshot(args.output/'desktop-editable-voice.png')
+    c.fill('800 × 360 ÷ 7.2','km'); c.click('提交'); c.steps(3)
+    c.send('Page.reload'); c.steps(3); c.text('北边影子增加'); c.click('查看本步推导'); c.text('天顶角之差等于两条半径夹角'); c.steps(3)
+    c.click('查看推导'); c.steps(4); c.click('完成本关'); c.completed(); c.no_overflow()
+    print('Desktop: catalog(140), A03 prediction/partial, offline failure + retry, voice draft + edit, equivalent math, refresh, historical/current derivation, completion',flush=True)
+    page('B01/'); c.steps(1); c.fill('只要释放东西就一定变轻'); c.click('提交'); c.steps(2); c.images()
+    c.click('继续'); c.steps(3); c.click('暂时想不出'); c.steps(4); c.text('已略过'); c.images()
+    c.fill('我只说天平'); c.click('提交'); c.text('先说清楚 150.00 g'); c.steps(4)
+    if args.ai:
+        c.fill('同一封闭装置（容器、空气、金属）整体前后均为 150.00 g，在 ±0.02 g 测量精度内不变；金属增加 0.30 g，说明其他部分共少约 0.30 g 的内部转移是合理推论，不是直接测量。'); c.click('提交'); c.steps(5)
+        c.text('你把测量范围固定了')
+    else: c.click('查看作者解释'); c.steps(5)
+    c.fill('70+0.5+0.6-1.5-0.7-0.6','kg'); c.click('提交'); c.steps(6); c.click('完成本关'); c.completed(); c.no_overflow()
+    print('Desktop: B01 original/skip, sealed mass, rubric feedback, transfer and completion',flush=True)
+    c.send('Emulation.setDeviceMetricsOverride',width=390,height=844,deviceScaleFactor=2,mobile=True)
+    c.send('Emulation.setTouchEmulationEnabled',enabled=True,maxTouchPoints=1)
+    page('A18/'); c.steps(1); c.fill('偏东'); c.click('提交'); c.steps(2); c.images(); c.no_overflow()
+    c.fill('(12-10)*360/24','°'); c.click('提交'); c.steps(3); c.text('东 30.5°'); c.click('完成本关'); c.completed()
+    c.js('window.scrollTo(0,0)'); c.screenshot(args.output/'mobile-a18.png')
+    page('N12/'); c.steps(1); c.click('暂时想不出'); c.steps(2); c.images(); c.no_overflow()
+    c.fill('110+(84-80)','拍'); c.click('提交'); c.steps(3)
+    if args.ai:
+        c.fill('选甲档。114−4＝110，对得上；112不符合。'); c.click('提交'); c.steps(4)
+        c.text('你用留出的脉冲区分了残档')
+    else: c.click('查看作者解释'); c.steps(4)
+    c.fill('120+(84-80)','拍'); c.click('提交'); c.steps(5); c.click('完成本关'); c.completed(); c.images(); c.no_overflow()
+    c.js('document.getElementById("home").scrollIntoView()'); c.screenshot(args.output/'mobile-n12.png')
+    print('Mobile: 390×844 with touch, A18 clock correction, N12 independent signal and return window, SVG loaded and no horizontal overflow',flush=True)
+
+if __name__=='__main__':
+    p=argparse.ArgumentParser(); p.add_argument('url'); p.add_argument('--chrome',type=Path,required=True);p.add_argument('--profile',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--auth-file',type=Path);p.add_argument('--audio',type=Path);p.add_argument('--ai',action='store_true');p.add_argument('--no-sandbox',action='store_true');a=p.parse_args()
+    a.profile.mkdir(mode=0o700); a.output.mkdir(parents=True,exist_ok=True)
+    with (a.output/'chromium.log').open('wb') as log:
+        proc = subprocess.Popen([str(a.chrome),'--headless','--disable-gpu','--no-first-run','--disable-background-networking','--disable-sync','--remote-debugging-port=0',f'--user-data-dir={a.profile}',*(['--no-sandbox'] if a.no_sandbox else []),'about:blank'],env={**os.environ,'TMPDIR':str(a.profile)},stdin=subprocess.DEVNULL,stdout=log,stderr=log)
+        try:
+            ready=a.profile/'DevToolsActivePort'; deadline=time.monotonic()+12
+            while not ready.exists():
+                assert proc.poll() is None and time.monotonic()<deadline,'Chromium did not start'
+                time.sleep(.1)
+            exercise(CDP(int(ready.read_text().splitlines()[0])),a)
+        finally:
+            proc.terminate(); proc.wait(timeout=12)

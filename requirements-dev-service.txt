@@ -1,0 +1,5 @@
+# Optional speech runtime; use a separate venv outside releases.
+vosk==0.3.45
+imageio-ffmpeg==0.6.0
+# Offline local rubric evaluator expects PyTorch 2.8 / Transformers 4.56.
+# Dev supplies those via the existing conda base used for the venv.

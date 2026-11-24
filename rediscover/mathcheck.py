@@ -75,6 +75,11 @@ def grade(q, raw, unit):
         return False,q['hint']
     if q.get('require_expression',True) and not n:
         return False,'数值吻合。请补上从题中数据得到它的计算关系。'
-    if q.get('units') and unit.strip().casefold().replace('²','^2').replace('³','^3') not in q['units']:
+    if q.get('inputs'):
+        present = {Fraction(t) for t in TOKEN.findall(parts[0]) if t[0].isdigit() or t[0]=='.'}
+        if not {Fraction(k) for k in q['inputs']} <= present:
+            return False,'数值吻合，但请用题面所给的原始数据表示计算关系。'
+    normal_unit = lambda s: s.strip().casefold().replace('²','^2').replace('³','^3')
+    if q.get('units') and normal_unit(unit) not in {normal_unit(s) for s in q['units']}:
         return False,'算式给出了目标数值，但单位不对或还未填写；请按题面单位填写。'
     return True,q['pass']

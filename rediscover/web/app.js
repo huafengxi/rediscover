@@ -17,21 +17,25 @@ async function request(path, payload){
   return data;
 }
 
-const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-async function voice(input,status,btn){
-  const say = s => status.textContent=s;
-  if(!isSecureContext){say('此地址不是安全上下文；语音不可用。可以继续键盘作答。');return;}
-  if(!Speech?.available || !('processLocally' in Speech.prototype)){say('此浏览器不支持本地语音转写。可以继续键盘作答。');return;}
-  btn.disabled=true;
-  try{
-    const ready=await Speech.available({langs:['zh-CN'],processLocally:true});
-    if(ready!=='available'){say('没有可用的本地中文语音包。可以继续键盘作答。');btn.disabled=false;return;}
-    const r=new Speech();r.lang='zh-CN';r.processLocally=true;r.interimResults=false;r.maxAlternatives=1;
-    r.onstart=()=>say('正在听……');
-    r.onresult=e=>{input.value=e.results[e.resultIndex][0].transcript;input.focus();say('请核对并修改转写，再点提交。列式时请确认数字、括号和运算符。');};
-    r.onerror=()=>say('未能完成本地转写，请重试或用键盘。');
-    r.onend=()=>{btn.disabled=false;if(status.textContent==='正在听……')say('没听清，请重试或用键盘。');};r.start();
-  }catch(e){btn.disabled=false;say('本地转写不可用，请用键盘。');}
+function voiceControl(input,status,actions){
+  // On existing dev HTTP, use the device audio picker/recorder, never getUserMedia or a vendor speech API.
+  const pick=el('input',null,{type:'file',accept:'audio/*,.webm,.m4a,.ogg,.wav,.mp3',capture:'user',hidden:'',id:'voice-file'});
+  const btn=button('语音转写',true);btn.onclick=()=>{
+    status.textContent='选择或录制一段中文音频（最长 20 秒、2 MB）；只在 Rediscover 所在机器转写。';pick.click();
+  };
+  pick.onchange=async()=>{
+    const audio=pick.files?.[0];pick.value='';if(!audio)return;
+    if(audio.size>2000000){status.textContent='录音不能超过 2 MB。';return;}
+    const previous=input.value;btn.disabled=true;status.textContent='正在本机服务转写……';
+    try{
+      const res=await fetch(base+'api/transcribe',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Rediscover':'1'},body:audio});
+      const d=await res.json();if(!res.ok)throw Error(d.error || '转写失败。');
+      if(input.value===previous)input.value=d.text;else input.setRangeText(d.text,input.selectionStart,input.selectionEnd,'end');
+      input.focus();status.textContent='请核对并修改转写，再点提交。列式请确认数字、括号和运算符。';
+    }catch(e){status.textContent=(e.message || '转写连接中断。')+' 输入没有提交；可重试或用键盘。';}
+    finally{btn.disabled=false;}
+  };
+  actions.append(btn,pick);
 }
 
 function showCatalog(data){
@@ -49,6 +53,7 @@ function showCourse(data,focus){
   main.replaceChildren(el('p','发现关 '+data.id,{class:'eyebrow'}),el('h1',data.title),el('p','已展开 '+data.steps.length+' / '+data.total,{class:'note','aria-live':'polite'}));
   document.title=data.id+' '+data.title+' · Rediscover';
   const makeAnswer=(a,label)=>{const box=el('div',null,{class:'answer'});box.append(el('p',label+ (a.skipped?'暂时想不出（已略过）':a.answer+(a.unit?' '+a.unit:''))));return box;};
+  const showSolution=(section,html)=>{const box=el('div',null,{class:'solution',tabindex:'-1'});box.innerHTML=html;section.append(box);return box;};
   data.steps.forEach((s,i)=>{
     const current=i===data.steps.length-1&&!data.completed;
     const section=el('article',null,{class:'step',id:s.id}), title=el('h2',(i+1)+' · '+s.title,{tabindex:'-1'});section.append(title);
@@ -58,7 +63,15 @@ function showCourse(data,focus){
     const q=s.question;
     if(q&&!current)section.append(el('p',q.prompt,{class:'note'}));
     for(const a of s.attempts){const b=makeAnswer(a,'作答：');b.append(el('p',a.feedback));section.append(b);}
-    if(s.solution){const solution=el('div',null,{class:'solution'});solution.innerHTML=s.solution;section.append(solution);}
+    if(s.solution)showSolution(section,s.solution);
+    else if(!current&&q?.canReveal){
+      const reveal=button(q.kind==='expression'?'查看本步推导':'查看本步作者解释',true), status=el('p','',{role:'status',class:'error note'});
+      const key=token();reveal.onclick=async()=>{
+        reveal.disabled=true;
+        try{const v=await request('api/course/'+data.id+'/action',{key,step:s.id,version:data.version,action:'reveal'});const opened=v.steps.find(step=>step.id===s.id);reveal.remove();status.remove();showSolution(section,opened.solution).focus();}
+        catch(e){status.textContent=e.message;reveal.disabled=false;}
+      };section.append(reveal,status);
+    }
     if(current){
       const form=el('form'), status=el('p','',{role:'status',class:'error'}), voiceNote=el('p','',{role:'status',class:'note'}), actions=el('div',null,{class:'actions'});
       let input,unit,inFlight=false,pending=null;
@@ -72,11 +85,12 @@ function showCourse(data,focus){
       }
       if(q){
         input=el('textarea',null,{id:'response',rows:'2',maxlength:q.kind==='expression'?'200':'1000',required:''});
+        const previous=s.attempts.at(-1);if(previous&&!previous.ok)input.value=previous.answer;
         if(q.kind==='expression'){input.setAttribute('spellcheck','false');input.setAttribute('placeholder','例：4 × (2 + 1)');}
         form.append(el('label',q.prompt,{for:'response'}),input);
-        if(q.unit){unit=el('input',null,{id:'unit',maxlength:'32',placeholder:q.unit});form.append(el('label','单位',{for:'unit'}),unit);}
+        if(q.unit){unit=el('input',null,{id:'unit',maxlength:'32',placeholder:q.unit});if(previous&&!previous.ok)unit.value=previous.unit;form.append(el('label','单位',{for:'unit'}),unit);}
         actions.append(button('提交',false,'submit'));
-        const mic=button('语音转写',true);mic.onclick=()=>voice(input,voiceNote,mic);actions.append(mic);
+        if(data.speech)voiceControl(input,voiceNote,actions);
         if(q.kind==='prediction'){const skip=button('暂时想不出',true);skip.onclick=()=>send('skip');actions.append(skip);}
         if(q.canReveal){const reveal=button(q.kind==='expression'?'查看推导':'查看作者解释',true);reveal.onclick=()=>send('reveal');actions.append(reveal);}
         form.onsubmit=e=>{e.preventDefault();send('submit');};
