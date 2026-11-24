@@ -14,7 +14,7 @@
     ["label",266,104,"270°","middle"],
     ["line",338,74,338,86,"ink"],
     ["label",338,104,"A 再访","middle"],
-    ["label",36,67,"同向相位","start"],
+    ["label",36,28,"同向相位","start"],
     ["label",50,60,"0°","middle"],
     ["label",122,60,"90°","middle"],
     ["label",338,60,"360°","middle"],
