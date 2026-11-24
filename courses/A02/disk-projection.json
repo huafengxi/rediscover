@@ -1,0 +1,16 @@
+{"height":185,"draw":[
+["circle",100,83,46,"surface"],
+["line",236,82,250,69,"surface"],
+["line",250,69,277,63,"surface"],
+["line",277,63,305,62,"surface"],
+["line",305,62,334,67,"surface"],
+["line",334,67,350,82,"surface"],
+["line",350,82,334,97,"surface"],
+["line",334,97,305,102,"surface"],
+["line",305,102,277,101,"surface"],
+["line",277,101,250,95,"surface"],
+["line",250,95,236,82,"surface"],
+["line",25,135,375,135,"guide"],
+["label",100,161,"正面","middle"],
+["label",291,161,"斜侧","middle"]
+]}

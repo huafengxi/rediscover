@@ -1,0 +1,16 @@
+{"height":224,"draw":[
+["line",83,50,319,50,"surface"],
+["line",83,50,201,168,"measure"],
+["line",201,168,319,50,"measure"],
+["line",201,50,201,168,"guide"],
+["dot",83,50],
+["dot",319,50],
+["dot",201,168],
+["label",84,34,"甲 (0,6)","middle"],
+["label",318,34,"乙 (8,6)","middle"],
+["label",137,71,"45°","middle"],
+["label",266,71,"45°","middle"],
+["label",201,194,"船","middle"],
+["label",363,119,"北 ↑","middle"],
+["label",365,147,"东 →","middle"]
+]}

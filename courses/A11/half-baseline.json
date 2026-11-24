@@ -1,0 +1,18 @@
+{"height":221,"draw":[
+["line",67,151,198,35,"measure"],
+["line",198,35,329,151,"measure"],
+["line",198,35,198,151,"guide"],
+["line",67,151,329,151,"surface"],
+["dot",198,35],
+["dot",67,151],
+["dot",198,151],
+["dot",329,151],
+["label",197,24,"恒星","middle"],
+["label",148,99,"p","middle"],
+["label",241,99,"p","middle"],
+["label",67,176,"E1","middle"],
+["label",198,176,"S","middle"],
+["label",329,176,"E2","middle"],
+["label",128,211,"1 AU","middle"],
+["label",269,211,"1 AU","middle"]
+]}

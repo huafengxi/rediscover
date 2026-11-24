@@ -1,0 +1,12 @@
+{"height":213,"draw":[
+["line",52,170,373,170,"guide"],
+["line",52,32,52,170,"ink"],
+["line",135,170,135,164,"measure"],
+["line",286,170,286,44,"measure"],
+["label",123,149,"+25 s","middle"],
+["label",285,34,"+525 s","middle"],
+["label",135,198,"近季","middle"],
+["label",286,198,"远季","middle"],
+["label",42,175,"0","end"],
+["label",65,24,"观测减预报","start"]
+]}
