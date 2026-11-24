@@ -2,6 +2,7 @@
 import re, json
 from pathlib import Path
 from html import escape
+from unicodedata import east_asian_width
 
 ROOT = Path(__file__).resolve().parents[1]
 ROW = re.compile(r'^\| ([A-N]\d\d) \| (.*?) \| (.*?) \|$', re.M)
@@ -39,8 +40,14 @@ def load(directory=None):
 def svg(f):
     kind, data, caption = f
     def e(s): return escape(str(s),quote=True)
-    def label(x,y,text,anchor='middle',size=17):
-        return f'<text x="{x}" y="{y}" text-anchor="{anchor}" font-size="{size}" fill="#182b34">{e(text)}</text>'
+    def label(x,y,text,anchor='middle',size=17,limit=None):
+        if not str(text): return ''
+        em = sum(1 if east_asian_width(c) in ('W','F') else .59 for c in str(text))
+        if limit is not None: size = min(size,limit/em)
+        width = em*size
+        left = width if anchor=='end' else width/2 if anchor=='middle' else 0
+        x = max(6+left,min(x,534-(width-left)))
+        return f'<text x="{x:.2f}" y="{y}" text-anchor="{anchor}" font-size="{size:.2f}" fill="#182b34">{e(text)}</text>'
     def line(a,b,c,d,color='#397274',width=3):
         return f'<path d="M{a},{b} L{c},{d}" stroke="{color}" stroke-width="{width}" fill="none"/>'
     def point(x,y,color='#a04934'):
@@ -92,7 +99,7 @@ def svg(f):
             width = 500/len(row)
             for j,name in enumerate(row):
                 x,y = 20+j*width,10+i*35
-                elements += f'<rect x="{x}" y="{y}" width="{width-2}" height="33" rx="3" fill="{"#c3dbd6" if i%2==0 else "#e2ece8"}"/>'+label(x+width/2,y+23,name,size=16)
+                elements += f'<rect x="{x}" y="{y}" width="{width-2}" height="33" rx="3" fill="{"#c3dbd6" if i%2==0 else "#e2ece8"}"/>'+label(x+width/2,y+23,name,size=16,limit=width-12)
     else:
         raise ValueError(f'Invalid figure kind {kind}')
     return f'<svg xmlns="http://www.w3.org/2000/svg" role="img" viewBox="0 0 540 {h}" font-family="system-ui,sans-serif"><title>{e(caption)}</title><rect width="540" height="{h}" rx="8" fill="#edf4f0"/>{elements}</svg>'.encode()
