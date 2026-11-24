@@ -11,16 +11,21 @@ if __name__ == '__main__':
     assert scratch.parent==Path('/tmp') and scratch.name.startswith('rediscover-local.')
     assert database.parent==scratch and urlsplit(a.url).hostname=='127.0.0.1' and urlsplit(a.url).port!=8871
     a.auth_file=None
-    b=Browser(a); assert len(b.view('A03')['steps'])==1
+    b=Browser(a); initial=b.view('A03'); assert len(initial['steps'])==1
+    version=initial['version']; b.action('A03','setup','continue',version=version)
+    before=b.view('A03'); read_before=b.read('A03')
     key=uuid.uuid4().hex
     c=sqlite3.connect(database)
     try:
         c.execute('BEGIN IMMEDIATE')
-        b.action('A03','sticks',answer='影子会变化',key=key,expect=503)
-        assert len(b.view('A03')['steps'])==1
-        assert c.execute('SELECT count(*) FROM progress').fetchone()[0]==0
+        b.action('A03','sticks',answer='影子会变化',key=key,expect=503,version=version)
+        assert b.view('A03')==before
+        b.read_on('A03','observations',version,expect=503)
+        assert b.read('A03')==read_before
     finally: c.rollback(); c.close()
-    v=b.action('A03','sticks',answer='影子会变化',key=key)
-    assert len(v['steps'])==2 and len(v['steps'][0]['attempts'])==1
-    assert b.action('A03','sticks',answer='影子会变化',key=key)==v
-    print('SQLite write failure: 503, evidence stayed locked, identical retry recorded and advanced exactly once')
+    v=b.action('A03','sticks',answer='影子会变化',key=key,version=version)
+    assert len(v['steps'])==3 and len(v['steps'][1]['attempts'])==1
+    assert b.action('A03','sticks',answer='影子会变化',key=key,version=version)==v
+    r=b.read_on('A03','observations',version)
+    assert r['gate']['id']=='closure' and r==b.read_on('A03','observations',version)
+    print('SQLite write failure: quiz and reading returned 503, evidence stayed locked, retries advanced once')

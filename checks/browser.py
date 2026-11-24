@@ -55,6 +55,25 @@ class CDP:
     def completed(self): self.text('本关已完成')
     def offline(self,flag): self.send('Network.emulateNetworkConditions',offline=flag,latency=0,downloadThroughput=-1,uploadThroughput=-1)
 
+def reading(c,args,device):
+    c.wait('document.querySelector(".mode-nav [aria-current]")?.textContent==="阅读模式"')
+    c.wait('document.querySelectorAll(".reading .read-step").length===2'); c.images(); c.no_overflow()
+    assert c.js('!document.querySelector("form,#observations,#closure") && document.images.length===1')
+    c.text('如果不能绕行星走一圈'); c.text('先排除一个会骗人的差别')
+    c.screenshot(args.output/f'{device}-a03-opening.png')
+    c.js('document.querySelector("#sticks figure").scrollIntoView({block:"center"})')
+    c.screenshot(args.output/f'{device}-a03-clock.png')
+    c.click('看两站记录'); c.text('短弧怎样换成整圈'); c.text('1/50'); c.text('39,600'); c.images()
+    assert c.js('document.images.length===4 && !document.body.innerText.includes("10.9°") && !document.querySelector("form")')
+    for sid in ('observations','geometry','arc'):
+        c.js(f'document.querySelector("#{sid} figure").scrollIntoView({{block:"center"}})')
+        c.screenshot(args.output/f'{device}-a03-{sid}.png')
+    c.click('看第三站的读数'); c.text('10.9° ± 0.2°'); c.text('用第三张记录检验估计'); c.no_overflow()
+    c.js('document.getElementById("closure").scrollIntoView()')
+    c.screenshot(args.output/f'{device}-a03-conclusion.png')
+    assert c.js('!document.querySelector("form, .reading-gate, .answer")')
+
+
 def exercise(c,args):
     base=args.url.rstrip('/')+'/'
     c.send('Network.enable'); c.send('Network.setCacheDisabled',cacheDisabled=True); c.send('Page.enable'); c.send('DOM.enable')
@@ -65,29 +84,53 @@ def exercise(c,args):
         c.send('Fetch.enable',patterns=[{'urlPattern':base+'*'}],handleAuthRequests=True)
     c.send('Emulation.setDeviceMetricsOverride',width=1366,height=900,deviceScaleFactor=1,mobile=False)
     def page(s):
-        c.send('Page.navigate',url=base+s); c.wait('location.pathname==='+json.dumps(urlsplit(base+s).path))
+        c.send('Page.navigate',url=base+s); c.wait('location.href==='+json.dumps(base+s))
+    def mode(label):
+        c.js('[...document.querySelectorAll(".mode-nav a")].find(x=>x.textContent==='+json.dumps(label)+').click()')
+        c.wait('document.querySelector(".mode-nav [aria-current]")?.textContent==='+json.dumps(label))
+    def reload():
+        c.js('window.__beforeReload=true'); c.send('Page.reload'); c.wait('!window.__beforeReload')
     page('')
     # Chromium has accepted/cached the BasicAuth challenge for this origin; resume normal network I/O.
     if args.auth_file: c.send('Fetch.disable')
     c.wait('document.querySelectorAll(".list a").length===140'); c.no_overflow()
     c.screenshot(args.output/'desktop-catalog.png')
-    page('A03/'); c.steps(1); c.images()
-    c.fill('北边影子增加'); c.offline(True); c.click('提交'); c.text('连接中断'); c.steps(1)
+    c.js('document.querySelector(\'.list a[href="/rediscover/A03/"]\').click()'); reading(c,args,'desktop')
+    read_y=c.js('scrollY'); assert read_y>300
+    mode('答题模式'); c.steps(1)
+    assert c.js('!document.querySelector("#observations,#arc,#closure,form textarea") && !document.images.length')
+    c.click('继续'); c.steps(2); c.images()
+    c.fill('北边影子增加'); c.offline(True); c.click('提交'); c.text('连接中断'); c.steps(2)
     assert c.js('document.querySelector("#response").value')=='北边影子增加'
-    c.offline(False); c.click('提交'); c.steps(2); c.text('我当时写下：北边影子增加'); c.images()
-    c.fill('800/7.2','km'); c.click('提交'); c.text('每度对应的距离'); c.steps(2)
+    c.offline(False); c.click('提交'); c.steps(3); c.text('我当时写下：北边影子增加'); c.images()
+    mode('阅读模式'); c.wait(f'Math.abs(scrollY-{read_y})<8'); c.text('用第三张记录检验估计')
+    assert c.js('!document.querySelector(".answer,form")')
+    reload(); c.wait(f'Math.abs(scrollY-{read_y})<8'); c.text('10.9° ± 0.2°')
+    mode('答题模式'); c.steps(3); c.text('我当时写下：北边影子增加')
+    assert c.js('!document.querySelector("#arc,#closure")')
+    c.click('继续'); c.steps(4); c.click('继续'); c.steps(5)
+    c.fill('800/7.2','km'); c.click('查看提示'); c.text('C 所对应的是哪一个角'); c.steps(5)
+    assert c.js('document.querySelector("#response").value')=='800/7.2'
+    c.click('下一条提示'); c.text('整圈未知'); c.click('提交'); c.text('每度对应的距离'); c.steps(5)
+    reload(); c.steps(5); c.text('每度对应的距离'); c.text('整圈未知')
+    assert c.js('!document.querySelector(".solution,#transfer")')
     if args.audio:
-        audio = str(args.audio.resolve())
+        audio=str(args.audio.resolve())
+        current='fetch("/rediscover/api/course/A03").then(r=>r.json())'
+        before=c.js(current)
         c.wait('!!document.querySelector("#voice-file")')
         node=c.send('DOM.querySelector',nodeId=c.send('DOM.getDocument')['root']['nodeId'],selector='#voice-file')['nodeId']
         c.send('DOM.setFileInputFiles',files=[audio],nodeId=node)
-        c.text('请核对并修改转写'); assert re.search('[\u3400-\u9fff]{2,}',c.js('document.querySelector("#response").value')); c.steps(2)
+        c.text('请核对并修改转写'); assert re.search('[\u3400-\u9fff]{2,}',c.js('document.querySelector("#response").value'))
+        assert c.js(current)==before
         c.screenshot(args.output/'desktop-editable-voice.png')
-    c.fill('800 × 360 ÷ 7.2','km'); c.click('提交'); c.steps(3)
-    c.send('Page.reload'); c.steps(3); c.text('北边影子增加'); c.click('查看本步推导'); c.text('天顶角之差等于两条半径夹角'); c.steps(3)
-    c.click('查看推导'); c.steps(4); c.click('完成本关'); c.completed(); c.no_overflow()
-    print('Desktop: catalog(140), A03 prediction/partial, offline failure + retry, voice draft + edit, equivalent math, refresh, historical/current derivation, completion',flush=True)
-    page('B01/'); c.steps(1); c.fill('只要释放东西就一定变轻'); c.click('提交'); c.steps(2); c.images()
+    c.fill('800 × 360 ÷ 7.2','km'); c.click('提交'); c.steps(6); c.text('1/50')
+    c.screenshot(args.output/'desktop-quiz-derivation.png')
+    c.fill('660/(6/360)','km'); c.click('提交'); c.steps(7); c.text('39,600 km')
+    assert c.js('!document.body.innerText.includes("10.9°")')
+    c.click('查看推导'); c.steps(8); c.text('10.8°'); c.text('10.9° ± 0.2°'); c.click('完成本关'); c.completed(); c.no_overflow()
+    print('Desktop 1366×900: A03 catalog/default reading, both gates/four figures/full derivation, exact scroll resume/switch, fresh quiz, original prediction, offline retry, two hints/partial, voice draft + edit (%s), equivalent math/transfer, gated recheck and completion'%bool(args.audio),flush=True)
+    page('B01/?mode=quiz'); c.steps(1); c.fill('只要释放东西就一定变轻'); c.click('提交'); c.steps(2); c.images()
     c.click('继续'); c.steps(3); c.click('暂时想不出'); c.steps(4); c.text('已略过'); c.images()
     c.fill('我只说天平'); c.click('提交'); c.text('先说清楚 150.00 g'); c.steps(4)
     if args.ai:
@@ -98,11 +141,15 @@ def exercise(c,args):
     print('Desktop: B01 original/skip, sealed mass, rubric feedback, transfer and completion',flush=True)
     c.send('Emulation.setDeviceMetricsOverride',width=390,height=844,deviceScaleFactor=2,mobile=True)
     c.send('Emulation.setTouchEmulationEnabled',enabled=True,maxTouchPoints=1)
-    page('A18/'); c.steps(1); c.fill('偏东'); c.click('提交'); c.steps(2); c.images(); c.no_overflow()
+    c.js('sessionStorage.clear()'); c.send('Network.clearBrowserCookies')
+    page('A03/'); reading(c,args,'mobile'); mode('答题模式'); c.steps(1); c.click('继续'); c.steps(2)
+    c.click('暂时想不出'); c.steps(3); c.text('已略过'); c.images(); c.no_overflow()
+    print('Mobile 390×844 touch: A03 uninterrupted reading between evidence gates, four diagrams, formulas, conclusion, and fresh quiz skip',flush=True)
+    page('A18/?mode=quiz'); c.steps(1); c.fill('偏东'); c.click('提交'); c.steps(2); c.images(); c.no_overflow()
     c.js('document.querySelector("#evidence figure").scrollIntoView({block:"center"})'); c.screenshot(args.output/'mobile-a18-evidence.png')
     c.fill('(12-10)*360/24','°'); c.click('提交'); c.steps(3); c.text('东 30.5°'); c.click('完成本关'); c.completed()
     c.js('window.scrollTo(0,0)'); c.screenshot(args.output/'mobile-a18.png')
-    page('N12/'); c.steps(1); c.click('暂时想不出'); c.steps(2); c.images(); c.no_overflow()
+    page('N12/?mode=quiz'); c.steps(1); c.click('暂时想不出'); c.steps(2); c.images(); c.no_overflow()
     c.fill('110+(84-80)','拍'); c.click('提交'); c.steps(3)
     if args.ai:
         c.fill('选甲档。114−4＝110，对得上；112不符合。'); c.click('提交'); c.steps(4)

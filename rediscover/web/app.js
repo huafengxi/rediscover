@@ -39,7 +39,7 @@ function voiceControl(input,status,actions){
 }
 
 function showCatalog(data){
-  main.replaceChildren(el('p','从地面丈量到月面返航',{class:'eyebrow'}),el('h1','重走发现之路'),el('p','先猜会发生什么，再打开证据。每篇课文逐步展开，重载时从上次停下的地方继续。'));
+  main.replaceChildren(el('p','从地面丈量到月面返航',{class:'eyebrow'}),el('h1','重走发现之路'),el('p','从一个问题出发，顺着图和证据读到结论。想先动手预测、列式或解释，可以切到答题模式。'));
   const jump=el('nav',null,{class:'jump','aria-label':'主线'});main.append(jump);
   for(const [g,group] of Object.entries(data.groups)){
     const rows=data.courses.filter(c=>c.id[0]===g);if(!rows.length)continue;
@@ -49,19 +49,69 @@ function showCatalog(data){
   }
   main.append(el('p','版本 '+data.release,{class:'note'}));
 }
-function showCourse(data,focus){
-  main.replaceChildren(el('p','发现关 '+data.id,{class:'eyebrow'}),el('h1',data.title),el('p','已展开 '+data.steps.length+' / '+data.total,{class:'note','aria-live':'polite'}));
+function courseHeader(data,mode){
+  const nav=el('nav',null,{class:'mode-nav','aria-label':'课文模式'});
+  const path=base+data.id+'/';
+  for(const [key,label,href] of [['read','阅读模式',path],['quiz','答题模式',path+'?mode=quiz']]){
+    nav.append(el('a',label,{href,...(mode===key?{'aria-current':'page'}:{})}));
+  }
+  main.replaceChildren(el('p','发现关 '+data.id,{class:'eyebrow'}),el('h1',data.title),nav);
   document.title=data.id+' '+data.title+' · Rediscover';
+}
+function showSolution(section,html,reading=false){
+  const box=el('div',null,{class:reading?'reading-solution':'solution',tabindex:'-1'});
+  box.innerHTML=html;section.append(box);return box;
+}
+function showBody(section,s){
+  const body=el('div');body.innerHTML=s.html;section.append(body);
+  if(s.figure){
+    const f=el('figure',null,s.figure.diagram?{class:'diagram'}:{});
+    f.append(el('img',null,{src:s.figure.url,alt:s.figure.alt}),el('figcaption',s.figure.caption));section.append(f);
+  }
+}
+function showReading(data){
+  courseHeader(data,'read');
+  const article=el('article',null,{class:'reading','aria-label':data.title});
+  main.append(article);
+  function append(view,from=0){
+    for(const s of view.steps.slice(from)){
+      const section=el('section',null,{class:'read-step',id:s.id});
+      section.append(el('h2',s.title,{tabindex:'-1'}));showBody(section,s);
+      if(s.question)section.append(el('p',s.question.prompt,{class:'reflection'}));
+      if(s.solution)showSolution(section,s.solution,true);
+      article.append(section);
+    }
+    if(view.gate){
+      const pause=el('div',null,{class:'reading-gate'}), reveal=button(view.gate.label), status=el('p','',{role:'status',class:'error note'});
+      reveal.onclick=async()=>{
+        reveal.disabled=true;
+        try{
+          const next=await request('api/read/'+view.id+'/action',{version:view.version,step:view.gate.id});
+          pause.remove();append(next,view.steps.length);
+          document.getElementById(view.gate.id)?.querySelector('h2').focus();
+        }catch(e){status.textContent=e.message;reveal.disabled=false;}
+      };
+      pause.append(reveal,status);article.append(pause);
+    }else article.append(el('a','返回课程目录',{href:base,class:'reading-end'}));
+  }
+  append(data);
+}
+function showCourse(data){
+  courseHeader(data,'quiz');
+  main.append(el('p','已展开 '+data.steps.length+' / '+data.total,{class:'note','aria-live':'polite'}));
   const makeAnswer=(a,label)=>{const box=el('div',null,{class:'answer'});box.append(el('p',label+ (a.skipped?'暂时想不出（已略过）':a.answer+(a.unit?' '+a.unit:''))));return box;};
-  const showSolution=(section,html)=>{const box=el('div',null,{class:'solution',tabindex:'-1'});box.innerHTML=html;section.append(box);return box;};
   data.steps.forEach((s,i)=>{
     const current=i===data.steps.length-1&&!data.completed;
     const section=el('article',null,{class:'step',id:s.id}), title=el('h2',(i+1)+' · '+s.title,{tabindex:'-1'});section.append(title);
     if(s.prediction)section.append(makeAnswer(s.prediction,'我当时写下：'));
-    const body=el('div');body.innerHTML=s.html;section.append(body);
-    if(s.figure){const f=el('figure');f.append(el('img',null,{src:s.figure.url,alt:s.figure.caption}),el('figcaption',s.figure.caption));section.append(f);}
+    showBody(section,s);
     const q=s.question;
     if(q&&!current)section.append(el('p',q.prompt,{class:'note'}));
+    if(q?.hints?.length){
+      const hints=el('ol',null,{class:'hints','aria-label':'已查看的提示'});
+      for(const hint of q.hints)hints.append(el('li',hint));
+      section.append(hints);
+    }
     for(const a of s.attempts){const b=makeAnswer(a,'作答：');b.append(el('p',a.feedback));section.append(b);}
     if(s.solution)showSolution(section,s.solution);
     else if(!current&&q?.canReveal){
@@ -77,10 +127,25 @@ function showCourse(data,focus){
       let input,unit,inFlight=false,pending=null;
       async function send(action){
         if(inFlight)return;
-        const fields={action,step:s.id,version:data.version,answer:action==='submit'?input?.value:'',unit:action==='submit'?unit?.value:''};
+        const draft=input?.value, draftUnit=unit?.value;
+        const fields={action,step:s.id,version:data.version,answer:action==='submit'?draft:'',unit:action==='submit'?draftUnit:''};
         if(!pending || pending.signature!==JSON.stringify(fields))pending={signature:JSON.stringify(fields),data:{...fields,key:token()}};
         inFlight=true;status.textContent='正在保存……';for(const b of actions.children)b.disabled=true;
-        try{const result=await request('api/course/'+data.id+'/action',pending.data);showCourse(result,result.steps.at(-1).id);}
+        try{
+          const result=await request('api/course/'+data.id+'/action',pending.data);
+          showCourse(result);
+          const ownStep=document.getElementById(s.id);
+          if(action==='hint'&&ownStep?.querySelector('#response')){
+            ownStep.querySelector('#response').value=draft;
+            if(unit)ownStep.querySelector('#unit').value=draftUnit;
+          }
+          // If this answer exposes a derivation, read it before moving to the next prompt.
+          const solution=result.steps.find(step=>step.id===s.id)?.solution;
+          const target=solution&&!s.solution?ownStep?.querySelector('.solution'):
+            action==='hint'?ownStep?.querySelector('.hints li:last-child'):
+            document.getElementById(result.steps.at(-1).id)?.querySelector('h2');
+          if(target){target.tabIndex=-1;target.focus();}
+        }
         catch(e){status.textContent=e.message;for(const b of actions.children)b.disabled=false;inFlight=false;}
       }
       if(q){
@@ -92,6 +157,7 @@ function showCourse(data,focus){
         actions.append(button('提交',false,'submit'));
         if(data.speech)voiceControl(input,voiceNote,actions);
         if(q.kind==='prediction'){const skip=button('暂时想不出',true);skip.onclick=()=>send('skip');actions.append(skip);}
+        if(q.canHint){const hint=button(q.hints.length?'下一条提示':'查看提示',true);hint.onclick=()=>send('hint');actions.append(hint);}
         if(q.canReveal){const reveal=button(q.kind==='expression'?'查看推导':'查看作者解释',true);reveal.onclick=()=>send('reveal');actions.append(reveal);}
         form.onsubmit=e=>{e.preventDefault();send('submit');};
       }else{
@@ -102,11 +168,32 @@ function showCourse(data,focus){
     main.append(section);
   });
   if(data.completed)main.append(el('p','本关已完成。可以重读以上记录。',{class:'complete'}),el('a','返回课程目录',{href:base}));
-  if(focus)document.getElementById(focus)?.querySelector('h2')?.focus();
+}
+// Position belongs to this tab, course version and mode, not to the answer record.
+// Browsers without sessionStorage can still read and submit normally.
+async function preservePosition(data,mode){
+  const key=`rd:position:${data.id}:${data.version}:${mode}`;
+  const remember=()=>{try{sessionStorage.setItem(key,String(window.scrollY));}catch{}};
+  let y=0;
+  try{y=Number(sessionStorage.getItem(key))||0;}catch{}
+  main.addEventListener('click',event=>{if(event.target.closest('.mode-nav a'))remember();});
+  const hash=location.hash.slice(1);
+  if(y||hash){
+    await Promise.allSettled([...document.images].map(img=>img.decode()));
+    const anchor=hash&&document.getElementById(hash);
+    if(anchor)anchor.scrollIntoView();else window.scrollTo(0,y);
+  }
+  addEventListener('pagehide',remember,{once:true});
 }
 async function start(){
   const id=location.pathname.match(/^\/rediscover\/([A-N]\d\d)\/$/)?.[1];
-  try{if(id)showCourse(await request('api/course/'+id));else showCatalog(await request('api/catalog'));}
-  catch(e){main.replaceChildren(el('h1','未能打开'),el('p',e.message),el('a','重新加载',{href:location.pathname}));}
+  try{
+    if(!id){showCatalog(await request('api/catalog'));return;}
+    history.scrollRestoration='manual';
+    const quiz=new URLSearchParams(location.search).get('mode')==='quiz';
+    const data=await request((quiz?'api/course/':'api/read/')+id);
+    if(quiz)showCourse(data);else showReading(data);
+    await preservePosition(data,quiz?'quiz':'read');
+  }catch(e){main.replaceChildren(el('h1','未能打开'),el('p',e.message),el('a','重新加载',{href:location.pathname+location.search}));}
 }
 start();

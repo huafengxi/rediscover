@@ -1,5 +1,5 @@
-"""Re-run the same HTTP assertions locally or at authenticated dev ingress (stdlib only)."""
-import argparse, base64, collections, http.cookiejar, json, os, re, sys, uuid
+"""Exercise both modes over HTTP, locally or through authenticated ingress (stdlib only)."""
+import argparse, base64, collections, http.cookiejar, json, re, uuid
 import urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 from xml.etree import ElementTree
@@ -25,72 +25,136 @@ class Browser:
             assert r.status==expect,(path,r.status,expect)
             return r.read()
     def view(self,i): return json.loads(self.raw('api/course/'+i))
+    def read(self,i): return json.loads(self.raw('api/read/'+i))
+    def read_on(self,i,s,version,expect=200):
+        return json.loads(self.raw(f'api/read/{i}/action',dict(step=s,version=version),expect))
     def action(self,i,s,action='submit',answer='',unit='',key=None,expect=200,version=1):
         return json.loads(self.raw('api/course/'+i+'/action',dict(key=key or uuid.uuid4().hex,action=action,step=s,version=version,answer=answer,unit=unit),expect))
 
 
-def pilot(args):
-    for prediction in ('影子角度增大','影子不变',None):
-        b=Browser(args); assert len(b.view('A03')['steps'])==1
-        assert b.view('A03')['steps'][0]['title']=='两个中午'
-        assert b.raw('media/A03/arc.svg',expect=404)
-        b.action('A03','arc',action='reveal',expect=409)
+def svg(b,f):
+    assert f['caption'] and f['alt']
+    data=b.raw(f['url']); doc=ElementTree.fromstring(data)
+    assert doc.tag.endswith('}svg') and len(doc)>2
+    return data
+
+
+def a03(args):
+    cid='A03'
+    for prediction in ('北站会有偏差','两站没有差别',None):
+        b=Browser(args); start=b.view(cid); version=start['version']
+        def action(*a,**kw):return b.action(cid,*a,**kw,version=version)
+        assert [s['id'] for s in start['steps']]==['setup']
+        r=b.read(cid); assert [s['id'] for s in r['steps']]==['setup','sticks'] and r['gate']['id']=='observations'
+        assert all(x not in json.dumps(r,ensure_ascii=False) for x in ('7.2°','800 km','40,000','10.9°'))
+        b.raw('read-media/A03/observations.svg',expect=404)
+        b.read_on(cid,'closure',version,expect=409)
+        b.read_on(cid,'observations',version-1,expect=409)
+        # Open reading evidence, complete the reading, then prove quiz still at the untouched start.
+        r=b.read_on(cid,'observations',version); assert r==b.read_on(cid,'observations',version)==b.read(cid)
+        assert len(r['steps'])==7 and r['gate']['id']=='closure' and '10.9°' not in json.dumps(r,ensure_ascii=False)
+        r=b.read_on(cid,'closure',version); assert not r['gate'] and '10.9°' in r['steps'][-1]['html']
+        assert r==b.read(cid) and all('attempts' not in s and 'prediction' not in s for s in r['steps'])
+        assert b.view(cid)==start
+        for s in r['steps']:
+            if f:=s.get('figure'):
+                svg(b,f); b.raw(f['url'].replace('/read-media/','/media/'),expect=404)
+                Browser(args).raw(f['url'],expect=404)
+        action('arc','reveal',expect=409); action('arc','hint',expect=409)
+        v=action('setup','continue'); assert [s['id'] for s in v['steps']]==['setup','sticks']
+        assert '7.2°' not in json.dumps(v,ensure_ascii=False)
         k=uuid.uuid4().hex
         for _ in range(2):
-            v=b.action('A03','sticks',answer=prediction or '',action='submit' if prediction else 'skip',key=k)
-            assert len(v['steps'])==2 and len(v['steps'][0]['attempts'])==1
-        assert v==b.view('A03') and v['steps'][1]['prediction']['answer']==(prediction or '')
-        assert v['steps'][1]['prediction']['skipped']==(prediction is None)
-        assert 'solution' not in v['steps'][1]
-        ElementTree.fromstring(b.raw('media/A03/arc.svg'))
-        for ans,unit,hint in [('800/7.2','km','每度'),('40000','km','数值吻合'),('800*360/7.2','m','单位'),('800+7.2','km','比例'),('1/0','km','为零')]:
-            v=b.action('A03','arc',answer=ans,unit=unit)
-            assert len(v['steps'])==2 and hint in v['steps'][1]['attempts'][-1]['feedback']
-        v=b.action('A03','arc',answer='800 ÷ (7.2 ÷ 360)' if prediction else '800 × 360 ÷ 7.2',unit='km')
-        assert len(v['steps'])==3
-        v=b.action('A03','arc',answer='1+2',unit='km');assert len(v['steps'])==3
-        v=b.action('A03','recheck','reveal');assert len(v['steps'])==4 and '10.8' in v['steps'][2]['solution']
-        v=b.action('A03','closure','continue');assert v['completed'] and v==b.view('A03')
-    b=Browser(args); v=b.view('B01'); assert '10.30' not in json.dumps(v)
-    v=b.action('B01','residue',answer='会变轻：有东西离开');assert len(v['steps'])==2
+            v=action('sticks',answer=prediction or '',action='submit' if prediction else 'skip',key=k)
+            assert len(v['steps'])==3 and len(v['steps'][1]['attempts'])==1
+        assert v==b.view(cid) and v['steps'][2]['prediction']['answer']==(prediction or '')
+        assert v['steps'][2]['prediction']['skipped']==(prediction is None)
+        assert b.read(cid)==r  # quiz data is not added to the article
+        svg(b,v['steps'][2]['figure']); b.raw('media/A03/geometry.svg',expect=404)
+        action('observations','continue'); v=action('geometry','continue'); assert len(v['steps'])==5
+        q=v['steps'][-1]['question']; assert q['canHint'] and q['hints']==[] and 'solution' not in v['steps'][-1]
+        k=uuid.uuid4().hex
+        hint1=action('arc','hint',key=k); assert hint1==action('arc','hint',key=k)
+        hint2=action('arc','hint'); step=hint2['steps'][-1]
+        assert len(step['question']['hints'])==2 and not step['attempts'] and 'solution' not in step
+        for ans,unit,hint in [('800/7.2','km','每度'),('7.2/360','km','比例'),('800*(7.2/360)','km','用反'),('360/7.2','km','份数'),('40000','km','数值吻合'),('800*360/7.2','m','单位'),('800*360/7.2','','单位'),('40*1000','km','原始数据'),('1/0','km','为零')]:
+            v=action('arc',answer=ans,unit=unit)
+            assert len(v['steps'])==5 and hint in v['steps'][-1]['attempts'][-1]['feedback'] and 'solution' not in v['steps'][-1]
+        v=action('arc',answer='800 ÷ (7.2 ÷ 360)' if prediction else '800 × 360 ÷ 7.2',unit='千米')
+        assert len(v['steps'])==6 and '1/50' in v['steps'][4]['solution'] and 'solution' not in v['steps'][5]
+        v=action('arc',answer='1+2',unit='km'); assert len(v['steps'])==6
+        assert len(action('transfer',answer='40*1000',unit='km')['steps'])==6
+        v=action('transfer',answer='660*360/6',unit='km'); assert len(v['steps'])==7 and '39,600' in v['steps'][5]['solution']
+        assert '10.9°' not in json.dumps(v,ensure_ascii=False) and 'solution' not in v['steps'][6]
+        v=action('recheck','reveal') if prediction is None else action('recheck',answer='1200/40000*360',unit='度')
+        assert len(v['steps'])==8 and '10.8' in v['steps'][6]['solution'] and '10.9°' in v['steps'][7]['html']
+        v=action('closure','continue'); assert v['completed'] and v==b.view(cid)
+    b=Browser(args); version=b.view(cid)['version']
+    b.action(cid,'setup','continue',version=version); b.action(cid,'sticks','skip',version=version)
+    assert b.read(cid)['gate']['id']=='observations'
+    b.raw('read-media/A03/observations.svg',expect=404)
+    print('A03: two reading gates and private media; original/skip/idempotency; progressive hints; partial/ratio/result/unit/error; equivalent expressions; independent transfer and third-station evidence; completion')
+
+
+def b01(args):
+    b=Browser(args); v=b.view('B01'); r=b.read('B01'); assert r['gate']['id']=='metal' and '10.30' not in json.dumps(v)
+    r=b.read_on('B01','metal',r['version']); assert r['gate']['id']=='sealed' and len(r['steps'])==3
+    r=b.read_on('B01','sealed',r['version']); assert r['gate'] is None and '内部转移' in r['steps'][3]['solution']
+    assert b.view('B01')==v; b.raw('media/B01/sealed.svg',expect=404)
+    v=b.action('B01','residue',answer='会变轻：有东西离开'); assert len(v['steps'])==2
     assert '会变轻' in v['steps'][1]['prediction']['answer']
     b.action('B01','metal','continue'); v=b.view('B01'); assert '150.00' not in json.dumps(v)
-    v=b.action('B01','weigh',answer='一样');assert len(v['steps'])==4 and '150.00' in v['steps'][-1]['html']
+    v=b.action('B01','weigh',answer='一样'); assert len(v['steps'])==4 and '150.00' in v['steps'][-1]['html']
     v=b.action('B01','sealed',answer='我只说天平'); assert len(v['steps'])==4 and v['steps'][-1]['attempts'][-1]['feedback']
-    v=b.action('B01','sealed','reveal');assert len(v['steps'])==5 and '内部转移' in v['steps'][3]['solution']
+    v=b.action('B01','sealed','reveal'); assert len(v['steps'])==5 and '内部转移' in v['steps'][3]['solution']
     b.action('B01','ledger',answer='70+0.5+0.6-1.5-0.7-0.6',unit='kg')
     assert b.action('B01','audit','continue')['completed']
-    print('A03/B01: 3 prediction paths, original, hidden evidence/media, idempotency, refresh, equivalent math, partial/result/unit/error, old-step repeat, reveal, explanation fallback/feedback, transfer, completion')
+    print('B01 v1: legacy compare gates, sealed record, original prediction, explanation feedback/reveal, transfer, completion')
 
 
-def all_courses(args):
+def routes(args,selected=()):
     b=Browser(args)
     data=json.loads(b.raw('api/catalog')); health=json.loads(b.raw('health')); assert health['release']==data['release']
     expected=dict(re.findall(r'^\| ([A-N]\d\d) \| (.*?) \| .*? \|$',MAP.read_text(),re.M))
     got={x['id']:x['title'] for x in data['courses']}
     assert len(expected)==len(got)==len(data['courses'])==health['courses']==140 and expected==got
-    groups=collections.Counter(id[0] for id in got)
+    groups=collections.Counter(i[0] for i in got)
     assert dict(groups)=={g:group['count'] for g,group in data['groups'].items()}
-    seen=set(); images=0; steps=0
-    for i in expected:
-        assert b'<html lang="zh-Hans">' in b.raw(i+'/')
+    seen=set(); images=steps=0
+    for i in selected or expected:
+        for suffix in ('/','?mode=read','?mode=quiz'):
+            assert b'<html lang="zh-Hans">' in b.raw(i+suffix)
         v=b.view(i); assert v['title']==expected[i] and len(v['steps'])==1 and v['total']>=3
+        initial=v; r=b.read(i); assert r['title']==expected[i] and r['version']==v['version'] and r['steps']
+        while r['gate']:
+            before=len(r['steps']); gate=r['gate']['id']
+            r=b.read_on(i,gate,r['version']); assert len(r['steps'])>before and r['steps'][before]['id']==gate
+        assert len(r['steps'])==v['total'] and b.read(i)==r and b.view(i)==initial
         while not v['completed']:
-            s=v['steps'][-1]; q=s.get('question'); key=uuid.uuid4().hex
+            s=v['steps'][-1]; q=s.get('question'); read=r['steps'][len(v['steps'])-1]
             assert s['html'] and s['html'] not in seen,(i,s['id']); seen.add(s['html']); steps+=1
-            for link in re.findall(r'href="/rediscover/([A-N]\d\d)/"',s['html']): assert link in got
+            assert {k:s[k] for k in ('id','html','title')}=={k:read[k] for k in ('id','html','title')}
+            assert not any(k in read for k in ('attempts','prediction')) and 'solution' not in s
+            for link in re.findall(r'href="/rediscover/([A-N]\d\d)/[^\"]*"',s['html']): assert link in got
             if s.get('figure'):
-                f=s['figure']; assert f['caption']
-                svg=ElementTree.fromstring(b.raw(f['url'])); assert svg.tag.endswith('}svg') and len(svg)>2; images+=1
+                f,rf=s['figure'],read['figure']; assert f['caption']==rf['caption'] and f['alt']==rf['alt']
+                assert svg(b,f)==svg(b,rf); images+=1
             action='continue' if not q else 'skip' if q['kind']=='prediction' else 'reveal'
-            new=b.action(i,s['id'],action,version=v['version'],key=key)
+            new=b.action(i,s['id'],action,version=v['version'])
             assert new['completed'] or len(new['steps'])==len(v['steps'])+1
+            if q:
+                assert all(q[k]==val for k,val in read['question'].items())
+                if action=='reveal': assert new['steps'][len(v['steps'])-1]['solution']==read['solution']
             v=new
         assert any(s.get('question') for s in v['steps']) and any(s.get('figure') for s in v['steps'])
     for asset in ('app.js','style.css'): assert b.raw(asset)
-    print('Counts:',dict(groups),'steps:',steps,'SVG:',images,'release:',health['release'],'AI configured:',health['ai'])
+    print('Two-mode routes:',len(selected or expected),'courses;',steps,'steps;',images,'identical SVG pairs;',health)
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('url');p.add_argument('--auth-file',type=Path);p.add_argument('--pilot',action='store_true');p.add_argument('--all',action='store_true');a=p.parse_args()
-    pilot(a)
-    if a.all: all_courses(a)
+    p=argparse.ArgumentParser(description=__doc__); p.add_argument('url'); p.add_argument('--auth-file',type=Path)
+    mode=p.add_mutually_exclusive_group(); mode.add_argument('--pilot',action='store_true'); mode.add_argument('--all',action='store_true'); mode.add_argument('--course',action='append',choices=re.findall(r'^\| ([A-N]\d\d) \|', MAP.read_text(),re.M))
+    a=p.parse_args()
+    if a.all or a.course:
+        routes(a,a.course or ())
+    else:
+        a03(a); b01(a); routes(a,('A03','B01'))

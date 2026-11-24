@@ -41,13 +41,14 @@ class App:
         with self.connect() as c:
             c.execute('PRAGMA journal_mode=WAL')
             c.execute('CREATE TABLE IF NOT EXISTS progress (sid TEXT,id TEXT,version INTEGER,data TEXT NOT NULL,PRIMARY KEY(sid,id,version))')
-        self.html,self.images = {},{}
+            c.execute('CREATE TABLE IF NOT EXISTS reading (sid TEXT,id TEXT,version INTEGER,gates INTEGER NOT NULL,PRIMARY KEY(sid,id,version))')
+        self.html,self.images,self.solutions = {},{},{}
         for cid, course in self.courses.items():
             for step in course['steps']:
                 key = (cid,step['id'])
                 self.html[key] = content.html(step['body'])
-                if 'figure' in step: self.images[key] = content.svg(step['figure'])
-                if 'solution' in step: content.html(step['solution'])
+                if 'figure' in step: self.images[key] = content.svg(step['figure'],cid)
+                if 'solution' in step: self.solutions[key] = content.html(step['solution'])
 
     def connect(self):
         return sqlite3.connect(self.db, timeout=5)
@@ -65,18 +66,72 @@ class App:
         row = c.execute('SELECT data FROM progress WHERE sid=? AND id=? AND version=?',(sid,course['id'],course['version'])).fetchone()
         return json.loads(row[0]) if row else {'at':0,'attempts':{},'actions':{},'solutions':[],'completed':False}
 
+    def step_view(self, course, step, media):
+        key = (course['id'],step['id'])
+        v = {'id':step['id'],'title':step['title'],'html':self.html[key]}
+        if key in self.images:
+            f = step['figure']
+            v['figure'] = {'url':f'{PREFIX}{media}/{key[0]}/{key[1]}.svg','caption':f[2],
+                           'alt':f[3] if len(f)>3 else f[2], 'diagram':f[0]=='diagram'}
+        if q := step.get('question'):
+            v['question'] = {k:q[k] for k in ('kind','prompt','unit') if k in q}
+        return v
+
     def view(self, course, p):
         opened = []
         for step in course['steps'][:p['at']+1]:
-            key = (course['id'],step['id'])
-            q = step.get('question')
-            v = {'id':step['id'],'title':step['title'],'html':self.html[key],'attempts':p['attempts'].get(step['id'],[]) }
-            if key in self.images: v['figure'] = {'url':f'{PREFIX}media/{key[0]}/{key[1]}.svg','caption':step['figure'][2]}
-            if q: v['question'] = {k: q[k] for k in ('kind','prompt','unit') if k in q} | {'canReveal':'solution' in step}
+            stepid = step['id']
+            v = self.step_view(course,step,'media')
+            v['attempts'] = p['attempts'].get(stepid,[])
+            if q := v.get('question'):
+                q['canReveal'] = 'solution' in step
+                hints = step['question'].get('hints',[])
+                shown = p.get('hints',{}).get(stepid,0)
+                if hints:
+                    q['hints'] = hints[:shown]
+                    q['canHint'] = shown < len(hints)
             if 'compare' in step: v['prediction'] = next(iter(p['attempts'].get(step['compare'],[])),None)
-            if step['id'] in p['solutions']: v['solution'] = content.html(step['solution'])
+            if stepid in p['solutions']: v['solution'] = self.solutions[course['id'],stepid]
             opened.append(v)
         return {k:course[k] for k in ('id','title','version')} | {'steps':opened,'total':len(course['steps']),'completed':p['completed'],'speech':bool(self.speech)}
+
+    def reading_count(self, c, sid, course):
+        row = c.execute('SELECT gates FROM reading WHERE sid=? AND id=? AND version=?',
+                        (sid,course['id'],course['version'])).fetchone()
+        return row[0] if row else 0
+
+    def reading_prefix(self, course, count):
+        steps = course['steps']
+        for i,step in enumerate(steps):
+            label = content.reading_gate(step)
+            if label:
+                if count == 0: return steps[:i], {'id':step['id'],'label':label}
+                count -= 1
+        return steps, None
+
+    def read_view(self, course, count):
+        opened = []
+        steps,gate = self.reading_prefix(course,count)
+        for step in steps:
+            v = self.step_view(course,step,'read-media')
+            if 'solution' in step: v['solution'] = self.solutions[course['id'],step['id']]
+            opened.append(v)
+        return {k:course[k] for k in ('id','title','version')} | {'steps':opened,'gate':gate}
+
+    def read_action(self, sid, course, d):
+        if not isinstance(d,dict) or set(d) != {'version','step'} or type(d['version']) is not int or not isinstance(d['step'],str):
+            raise Problem(400,'阅读操作格式不对。')
+        if d['version'] != course['version']: raise Problem(409,'课件版本已变化，请刷新。')
+        gates = [s['id'] for s in course['steps'] if content.reading_gate(s)]
+        with self.connect() as c:
+            c.execute('BEGIN IMMEDIATE')
+            count = self.reading_count(c,sid,course)
+            if count < len(gates) and d['step'] == gates[count]:
+                count += 1
+                c.execute('INSERT OR REPLACE INTO reading VALUES (?,?,?,?)',(sid,course['id'],course['version'],count))
+            elif d['step'] not in gates[:count]:
+                raise Problem(409,'请先读到这一处证据。')
+        return self.read_view(course,count)
 
     def rubric_feedback(self, q, met, clarify):
         keys = set(range(len(q['criteria'])))
@@ -119,7 +174,7 @@ class App:
     def action(self,sid,course,d):
         if not isinstance(d,dict): raise Problem(400,'请求格式不对。')
         aid,stepid,action,version,answer,unit = (d.get(k) for k in ('key','step','action','version','answer','unit'))
-        if not isinstance(aid,str) or not re.fullmatch(TOKEN,aid) or not isinstance(stepid,str) or action not in ('submit','skip','continue','reveal') or type(version) is not int:
+        if not isinstance(aid,str) or not re.fullmatch(TOKEN,aid) or not isinstance(stepid,str) or action not in ('submit','skip','continue','reveal','hint') or type(version) is not int:
             raise Problem(400,'操作格式不对。')
         if answer is None: answer = ''
         if unit is None: unit = ''
@@ -135,7 +190,8 @@ class App:
         q = step.get('question',{})
         kind = q.get('kind')
         if action=='submit' and not answer.strip(): raise Problem(400,'写下你的想法后再提交。')
-        if not ((action=='submit' and kind) or (action=='skip' and kind=='prediction') or (action=='continue' and not kind) or (action=='reveal' and 'solution' in step)):
+        if not ((action=='submit' and kind) or (action=='skip' and kind=='prediction') or (action=='continue' and not kind)
+                or (action=='reveal' and 'solution' in step) or (action=='hint' and q.get('hints'))):
             raise Problem(400,'本步不支持这个操作。')
         grade = None
         if action=='submit' and kind=='expression': grade = mathcheck.grade(q,answer,unit)
@@ -146,12 +202,16 @@ class App:
             if aid in p['actions']: return self.view(course,p)
             if len(p['actions']) >= 400: raise Problem(429,'本课已达到作答记录上限。')
             advance = action in ('continue','reveal','skip')
-            if action=='reveal' and stepid not in p['solutions']: p['solutions'].append(stepid)
+            if action=='hint':
+                hints = p.setdefault('hints',{})
+                hints[stepid] = min(hints.get(stepid,0)+1,len(q['hints']))
             if action in ('submit','skip'):
                 if kind=='prediction':
                     grade = True,'已记录原预测。' if action=='submit' else '已记录略过。'
                 p['attempts'].setdefault(stepid,[]).append({'answer':answer if action=='submit' else '', 'unit':unit if action=='submit' else '', 'skipped':action=='skip','ok':grade[0],'feedback':grade[1]})
                 advance = grade[0]
+            if (action=='reveal' or (action=='submit' and advance and step.get('solution_on_pass'))) and stepid not in p['solutions']:
+                p['solutions'].append(stepid)
             p['actions'][aid] = {'step':stepid,'action':action}
             if advance and not p['completed'] and stepid == steps[p['at']]['id']:
                 if p['at']+1 == len(steps): p['completed'] = True
@@ -183,7 +243,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def run(self):
         app = self.server.app
-        path = urlsplit(self.path).path
+        target = urlsplit(self.path)
+        path = target.path
         jar = cookies.SimpleCookie()
         try: jar.load(self.headers.get('Cookie',''))
         except cookies.CookieError: pass
@@ -202,16 +263,18 @@ class Handler(BaseHTTPRequestHandler):
                 try: return self.js({'text':app.speech.transcribe(self.rfile.read(int(length)))})
                 except local_models.AudioInput as e: raise Problem(422,str(e)) from None
                 except local_models.Busy: raise Problem(503,'转写暂忙；录音未保存，请重试。') from None
-            m = re.fullmatch(PREFIX+f'api/course/({ID})/action',path)
-            if not m or m[1] not in app.courses: raise Problem(404,'找不到课程。')
+            m = re.fullmatch(PREFIX+f'api/(course|read)/({ID})/action',path)
+            if not m or m[2] not in app.courses: raise Problem(404,'找不到课程。')
             if self.headers.get_content_type() != 'application/json': raise Problem(415,'需要 JSON。')
             length = self.headers.get('Content-Length','')
             if not re.fullmatch(r'[0-9]{1,5}',length) or not 0<int(length)<=8192: raise Problem(413,'请求长度无效。')
             try: d = json.loads(self.rfile.read(int(length)))
             except (ValueError,UnicodeError): raise Problem(400,'JSON 格式不对。') from None
-            return self.js(app.action(sid,app.courses[m[1]],d))
-        if path in (PREFIX.rstrip('/'),) or re.fullmatch(PREFIX+ID,path):
-            return self.respond(308,b'','text/plain',location=path+'/')
+            action = app.read_action if m[1]=='read' else app.action
+            return self.js(action(sid,app.courses[m[2]],d))
+        if path == PREFIX.rstrip('/') or re.fullmatch(PREFIX+ID,path):
+            query = '?'+target.query if target.query in ('mode=read','mode=quiz') else ''
+            return self.respond(308,b'','text/plain',location=path+'/'+query)
         if path == PREFIX or (re.fullmatch(PREFIX+f'({ID})/',path) and path[-4:-1] in app.courses):
             return self.respond(200,(ASSETS/'index.html').read_bytes(),'text/html; charset=utf-8',sid=None if sid else secrets.token_urlsafe(24))
         if path == PREFIX+'api/catalog':
@@ -219,17 +282,24 @@ class Handler(BaseHTTPRequestHandler):
         if path == PREFIX+'health': return self.js({'release':app.release,'courses':len(app.courses),'ai':app.ai,'speech':bool(app.speech)})
         if path in (PREFIX+'app.js',PREFIX+'style.css'):
             return self.respond(200,(ASSETS/path.split('/')[-1]).read_bytes(),('text/javascript' if path.endswith('.js') else 'text/css')+'; charset=utf-8')
-        m = re.fullmatch(PREFIX+f'api/course/({ID})',path)
-        if m and m[1] in app.courses:
-            course = app.courses[m[1]]
-            with app.connect() as c: return self.js(app.view(course, app.progress(c,sid,course)),sid=None if sid else secrets.token_urlsafe(24))
-        m = re.fullmatch(PREFIX+f'media/({ID})/([a-z0-9-]+)\\.svg',path)
+        m = re.fullmatch(PREFIX+f'api/(course|read)/({ID})',path)
+        if m and m[2] in app.courses:
+            course = app.courses[m[2]]
+            with app.connect() as c:
+                v = app.read_view(course,app.reading_count(c,sid,course)) if m[1]=='read' else app.view(course,app.progress(c,sid,course))
+            return self.js(v,sid=None if sid else secrets.token_urlsafe(24))
+        m = re.fullmatch(PREFIX+f'(media|read-media)/({ID})/([a-z0-9-]+)\\.svg',path)
         if m and sid:
-            key = m.groups()
+            key = (m[2],m[3])
             if key in app.images:
                 course = app.courses[key[0]]
-                with app.connect() as c: p = app.progress(c,sid,course)
-                if any(s['id']==key[1] for s in course['steps'][:p['at']+1]): return self.respond(200,app.images[key],'image/svg+xml')
+                with app.connect() as c:
+                    if m[1]=='read-media':
+                        opened,_ = app.reading_prefix(course,app.reading_count(c,sid,course))
+                    else:
+                        p = app.progress(c,sid,course)
+                        opened = course['steps'][:p['at']+1]
+                if any(s['id']==key[1] for s in opened): return self.respond(200,app.images[key],'image/svg+xml')
         raise Problem(404,'找不到已展开的资源。')
 
     def handle_request(self):

@@ -9,14 +9,15 @@
 - [课程验收标准](docs/lesson-acceptance.md)定义阅读体验、配图、题面、计算、引导与发布检查。
 - [项目背景](docs/project-context.md)记录学习目标、课程呈现和各条发现路线。
 - [《火带走了什么？》主持稿](lessons/fire/host.md)是 B01 各证据卡和迁移题的改编依据。
-- [`courses/`](courses/) 是 140 篇独立的 Markdown 手稿。手稿、未展开证据和判据不作为静态资源发布。
+- [`courses/`](courses/) 是 140 篇独立的 Markdown 手稿。A03 是双模式阅读样板，参见[作者说明](docs/release.md#内容与判定)。手稿、未展开证据和判据不作为静态资源发布。
 
 ## 本地运行
 
 ```sh
-python3 -B checks/build.py
+py="$HOME/miniconda3/bin/python3"
+"$py" -B checks/build.py
 scratch=$(mktemp -d /tmp/rediscover-local.XXXXXX)
-python3 -B -m rediscover.server --port 18871 --db "$scratch/state.sqlite"
+"$py" -B -m rediscover.server --port 18871 --db "$scratch/state.sqlite"
 ```
 
-打开 <http://127.0.0.1:18871/rediscover/>，另一个终端运行 `python3 -B checks/flow.py http://127.0.0.1:18871/rediscover/ --all`。默认不加载可选模型，解释题仍可查看作者解释；数学不依赖任何模型。部署、运行数据与检查方法见 [发布手册](docs/release.md)。
+打开 [课程目录](http://127.0.0.1:18871/rediscover/)、[A03 阅读](http://127.0.0.1:18871/rediscover/A03/)或 [A03 答题](http://127.0.0.1:18871/rediscover/A03/?mode=quiz)。在另一终端用同一 Python 运行 `checks/flow.py http://127.0.0.1:18871/rediscover/ --course A03`；改用 `--all` 可检查全部课程的两种模式。默认不加载可选模型，解释题仍可查看作者解释；数学不依赖模型。部署、运行数据与检查方法见 [发布手册](docs/release.md)。

@@ -1,5 +1,6 @@
 """Load private Markdown manuscripts and render their private, accessible SVGs."""
 import re, json
+from math import cos, sin, radians
 from pathlib import Path
 from html import escape
 from unicodedata import east_asian_width
@@ -18,10 +19,12 @@ def catalog():
     return groups, {i: {'id':i,'title':title,'goal':goal} for i,title,goal in rows}
 
 
-def load(directory=None):
+def load(directory=None, ids=()):
     groups, rows = catalog()
     courses = {}
-    for f in sorted((directory or ROOT/'courses').glob('*.md')):
+    directory = directory or ROOT/'courses'
+    files = [directory/(cid+'.md') for cid in ids] if ids else sorted(directory.glob('*.md'))
+    for f in files:
         name = f.stem
         meta, *chunks = re.split(r'^@@ ',f.read_text(),flags=re.M)
         version = int(meta.strip().removeprefix('version: '))
@@ -37,8 +40,21 @@ def load(directory=None):
     return groups, courses
 
 
-def svg(f):
-    kind, data, caption = f
+def reading_gate(step):
+    """Stop before evidence, not after it. Legacy prediction comparisons are gates too."""
+    return step.get('reading_gate') or ('看观测结果' if 'compare' in step else None)
+
+
+def svg(f, cid=None):
+    kind, data, caption = f[:3]
+    if kind == 'diagram':
+        if not re.fullmatch(r'[A-N]\d\d', cid or '') or not re.fullmatch(r'[a-z0-9-]+', data):
+            raise ValueError('Invalid diagram resource name')
+        directory = (ROOT/'courses'/cid).resolve()
+        path = (directory/(data+'.json')).resolve()
+        if directory.parent != ROOT/'courses' or path.parent != directory or path.stat().st_size > 32000:
+            raise ValueError('Invalid diagram resource path or size')
+        return diagram(json.loads(path.read_text()), caption)
     def e(s): return escape(str(s),quote=True)
     def label(x,y,text,anchor='middle',size=17,limit=None):
         if not str(text): return ''
@@ -105,12 +121,62 @@ def svg(f):
     return f'<svg xmlns="http://www.w3.org/2000/svg" role="img" viewBox="0 0 540 {h}" font-family="system-ui,sans-serif"><title>{e(caption)}</title><rect width="540" height="{h}" rx="8" fill="#edf4f0"/>{elements}</svg>'.encode()
 
 
+def diagram(spec, caption):
+    """Numeric drawing primitives only: never serve author-provided SVG markup."""
+    width = 400
+    height, commands = spec['height'], spec['draw']
+    if set(spec) != {'height','draw'} or type(height) is not int or not 100 <= height <= 480:
+        raise ValueError('Invalid diagram dimensions')
+    if not isinstance(commands,list) or not 1 <= len(commands) <= 200:
+        raise ValueError('Invalid diagram command count')
+    palette = {
+        'ink': ('#263b44', 2, ''), 'light': ('#885719', 2, ''),
+        'guide': ('#506563', 2, '5 4'), 'measure': ('#9c402c', 4, ''),
+        'surface': ('#176664', 3, ''), 'circle': ('#506563', 2, ''),
+    }
+    def number(v, lo=0, hi=480):
+        if type(v) not in (int,float) or not lo <= v <= hi:
+            raise ValueError(f'Diagram number outside [{lo}, {hi}]')
+        return round(v, 3)
+    def coord(x,y): return number(x,0,width), number(y,0,height)
+    def style(name):
+        color,weight,dash = palette[name]
+        return f'stroke="{color}" stroke-width="{weight}" stroke-dasharray="{dash or "none"}" stroke-linecap="round" fill="none"'
+    elements = []
+    for cmd in commands:
+        match cmd:
+            case ['line',x,y,u,v,ink]:
+                x,y = coord(x,y); u,v = coord(u,v)
+                elements.append(f'<path d="M{x},{y} L{u},{v}" {style(ink)}/>')
+            case ['circle',x,y,r,ink]:
+                x,y = coord(x,y); r = number(r,1,min(x,y,width-x,height-y))
+                elements.append(f'<circle cx="{x}" cy="{y}" r="{r}" {style(ink)}/>')
+            case ['arc',x,y,r,a,b,ink]:
+                x,y = coord(x,y); r = number(r,1,width)
+                a,b = number(a,-360,360),number(b,-360,360)
+                if not 0 < b-a < 360: raise ValueError('Invalid arc span')
+                def endpoint(angle):
+                    u,v = coord(x+r*cos(radians(angle)),y+r*sin(radians(angle)))
+                    return f'{u},{v}'
+                elements.append(f'<path d="M{endpoint(a)} A{r},{r} 0 {int(b-a>180)} 1 {endpoint(b)}" {style(ink)}/>')
+            case ['dot',x,y]:
+                x,y = coord(x,y)
+                elements.append(f'<circle cx="{x}" cy="{y}" r="3.5" fill="#263b44"/>')
+            case ['label',x,y,str(label),('start' | 'middle' | 'end') as anchor] if 0 < len(label) <= 52:
+                x,y = coord(x,y)
+                elements.append(f'<text x="{x}" y="{y}" text-anchor="{anchor}" fill="#182b34">{escape(label)}</text>')
+            case _: raise ValueError('Invalid diagram command')
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" role="img" viewBox="0 0 {width} {height}" '
+            f'font-family="system-ui,sans-serif" font-size="17"><title>{escape(caption)}</title>'
+            f'<rect width="{width}" height="{height}" rx="8" fill="#edf4f0"/>{"".join(elements)}</svg>').encode()
+
+
 def html(body):
     """Deliberately small Markdown subset; no raw HTML, links only to courses and HTTPS citations."""
     def inline(s):
         def replace(m):
             title, url = m.groups()
-            if re.fullmatch(r'/rediscover/[A-N]\d\d/|https://[A-Za-z0-9./#?%_~=&:+-]+',url):
+            if re.fullmatch(r'/rediscover/[A-N]\d\d/(?:\?mode=(?:read|quiz))?|https://[A-Za-z0-9./#?%_~=&:+-]+',url):
                 return f'<a href="{escape(url,quote=True)}">{escape(title)}</a>'
             raise ValueError(f'Unsupported Markdown link: {url}')
         result = []; start = 0
