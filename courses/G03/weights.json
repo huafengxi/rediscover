@@ -1,0 +1,16 @@
+{"height": 161, "draw": [
+  ["label",70,41,"位 3","middle"],
+  ["label",155,41,"位 2","middle"],
+  ["label",240,41,"位 1","middle"],
+  ["label",325,41,"位 0","middle"],
+  ["label",70,82,"8","middle"],
+  ["label",155,82,"4","middle"],
+  ["label",240,82,"2","middle"],
+  ["label",325,82,"1","middle"],
+  ["label",70,127,"−8","middle"],
+  ["label",155,127,"4","middle"],
+  ["label",240,127,"2","middle"],
+  ["label",325,127,"1","middle"],
+  ["line",29,98,370,98,"guide"],
+  ["label",194,154,"上：无符号；下：二补码","middle"]
+]}

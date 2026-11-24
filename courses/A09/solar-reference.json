@@ -1,0 +1,15 @@
+{"height":214,"draw":[
+["circle",101,94,59,"surface"],
+["circle",299,94,59,"surface"],
+["line",89,94,113,94,"guide"],
+["line",287,94,311,94,"guide"],
+["line",101,82,101,106,"guide"],
+["line",299,82,299,106,"guide"],
+["circle",79,94,5,"measure"],
+["circle",321,94,5,"measure"],
+["label",77,81,"V","middle"],
+["label",324,81,"V","middle"],
+["label",101,181,"甲站照片","middle"],
+["label",299,181,"乙站照片","middle"],
+["label",200,205,"同一时标、同一日面坐标","middle"]
+]}

@@ -1,0 +1,15 @@
+{"height":210,"draw":[
+["line",60,55,60,141,"surface"],
+["line",60,55,180,98,"measure"],
+["line",180,98,60,141,"measure"],
+["line",60,55,332,98,"guide"],
+["line",332,98,60,141,"guide"],
+["dot",180,98],
+["dot",332,98],
+["label",58,32,"站甲","middle"],
+["label",58,171,"站乙","middle"],
+["label",170,82,"V","middle"],
+["label",334,82,"S","middle"],
+["label",42,104,"B","middle"],
+["label",228,198,"距离越远，两站视差越小","middle"]
+]}

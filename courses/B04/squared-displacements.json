@@ -1,0 +1,12 @@
+{"height":193,"draw":[
+["line",71,40,127,40,"measure"],
+["line",71,72,127,72,"measure"],
+["line",71,104,295,104,"measure"],
+["line",71,136,295,136,"measure"],
+["line",211,23,211,148,"guide"],
+["label",132,45,"4","start"],
+["label",132,77,"4","start"],
+["label",302,110,"16","start"],
+["label",302,142,"16","start"],
+["label",211,170,"均值 10 μm²","middle"]
+]}

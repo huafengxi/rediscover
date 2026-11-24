@@ -1,0 +1,16 @@
+{"height":224,"draw":[
+["circle",93,109,35,"surface"],
+["circle",93,109,70,"circle"],
+["circle",293,109,45,"surface"],
+["circle",293,109,90,"circle"],
+["line",93,109,163,109,"guide"],
+["line",293,109,383,109,"guide"],
+["line",93,109,93,39,"guide"],
+["line",293,109,293,19,"guide"],
+["dot",128,109],
+["dot",93,39],
+["dot",338,109],
+["dot",293,19],
+["label",93,214,"构型 A","middle"],
+["label",293,214,"构型 B","middle"]
+]}

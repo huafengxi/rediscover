@@ -1,0 +1,16 @@
+{"height":210,"draw":[
+["line",36,148,364,148,"surface"],
+["line",80,148,200,28,"measure"],
+["line",200,28,320,148,"measure"],
+["line",200,29,200,148,"guide"],
+["line",200,133,215,133,"ink"],
+["line",215,133,215,148,"ink"],
+["dot",200,28],
+["label",200,20,"树","middle"],
+["label",116,133,"45°","middle"],
+["label",284,133,"45°","middle"],
+["label",80,173,"甲","middle"],
+["label",320,173,"乙","middle"],
+["label",200,195,"基线 120 m","middle"],
+["label",209,83,"垂距","start"]
+]}

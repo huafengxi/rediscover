@@ -1,0 +1,14 @@
+{"height":235,"draw":[
+["line",58,184,367,184,"ink"],
+["line",58,184,58,30,"ink"],
+["line",58,184,318,45,"guide"],
+["line",231,92,231,184,"surface"],
+["line",58,92,231,92,"surface"],
+["dot",231,92],
+["label",245,83,"标定点","start"],
+["label",49,99,"4200","end"],
+["label",231,205,"60","middle"],
+["label",44,202,"0","middle"],
+["label",66,27,"km/s","start"],
+["label",361,221,"Mpc","end"]
+]}

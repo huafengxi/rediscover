@@ -1,0 +1,19 @@
+{"height": 170, "draw": [
+  ["label",65,46,"快","middle"],
+  ["label",65,112,"保护","middle"],
+  ["line",109,27,183,27,"surface"],
+  ["line",183,27,183,59,"surface"],
+  ["line",183,59,109,59,"surface"],
+  ["line",109,59,109,27,"surface"],
+  ["label",146,51,"1 包","middle"],
+  ["line",109,91,257,91,"measure"],
+  ["line",257,91,257,123,"measure"],
+  ["line",257,123,109,123,"measure"],
+  ["line",109,123,109,91,"measure"],
+  ["label",183,115,"1 包","middle"],
+  ["line",103,145,294,145,"guide"],
+  ["line",273,145,330,145,"guide"],
+  ["line",330,145,322.0,141.0,"guide"],
+  ["line",330,145,322.0,149.0,"guide"],
+  ["label",349,151,"时间","middle"]
+]}

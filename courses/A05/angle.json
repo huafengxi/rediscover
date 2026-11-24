@@ -1,0 +1,13 @@
+{"height":195,"draw":[
+["line",329,41,48,99,"ink"],
+["line",48,99,329,157,"ink"],
+["line",48,99,329,99,"guide"],
+["line",329,41,329,157,"measure"],
+["arc",48,99,95,-11.66,11.66,"surface"],
+["dot",48,99],
+["label",46,125,"O","middle"],
+["label",153,88,"θ","middle"],
+["label",224,123,"D","middle"],
+["label",350,104,"d","middle"],
+["label",311,178,"月面","middle"]
+]}

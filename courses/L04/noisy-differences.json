@@ -1,0 +1,22 @@
+{
+  "height": 198,
+  "draw": [
+    ["label",21,29,"读到的 e / 格","start"],
+    ["line",45,82,355,82,"guide"],
+    ["line",59,82,150,54,"surface"],
+    ["line",150,54,241,110,"surface"],
+    ["line",241,110,332,54,"surface"],
+    ["dot",59,82],
+    ["dot",150,54],
+    ["dot",241,110],
+    ["dot",332,54],
+    ["label",59,69,"0","middle"],
+    ["label",150,42,"+1","middle"],
+    ["label",241,132,"−1","middle"],
+    ["label",332,42,"+1","middle"],
+    ["label",22,154,"相邻差（格）","start"],
+    ["label",104,183,"+1","middle"],
+    ["label",196,183,"−2","middle"],
+    ["label",287,183,"+2","middle"]
+  ]
+}

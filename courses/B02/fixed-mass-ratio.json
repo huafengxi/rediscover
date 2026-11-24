@@ -1,0 +1,14 @@
+{"height":217,"draw":[
+["label",18,30,"甲实线 / 乙虚线","start"],
+["line",72,65,152,65,"surface"],
+["line",72,93,192,93,"guide"],
+["line",72,144,232,144,"surface"],
+["line",72,172,312,172,"guide"],
+["label",23,85,"①","start"],
+["label",23,165,"②","start"],
+["label",161,72,"10 g","start"],
+["label",202,100,"15 g","start"],
+["label",240,150,"20 g","start"],
+["label",320,179,"30 g","start"],
+["label",201,205,"四条线共用同一质量刻度","middle"]
+]}

@@ -1,0 +1,14 @@
+{"height":211,"draw":[
+["circle",153,112,34,"surface"],
+["circle",153,112,61,"circle"],
+["circle",153,112,90,"circle"],
+["arc",153,112,21,0,179,"guide"],
+["arc",153,112,21,180,359,"guide"],
+["dot",153,91],
+["label",155,119,"近","middle"],
+["label",197,119,"中","middle"],
+["label",224,119,"远","middle"],
+["line",174,94,247,62,"guide"],
+["label",254,65,"细轨道示意","start"],
+["label",251,167,"分区用于计数","start"]
+]}
